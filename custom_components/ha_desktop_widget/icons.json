@@ -1,0 +1,16 @@
+{
+  "services": {
+    "hide": {
+      "service": "mdi:eye-off-outline"
+    },
+    "show": {
+      "service": "mdi:eye-outline"
+    },
+    "switch_page": {
+      "service": "mdi:tab"
+    },
+    "toggle": {
+      "service": "mdi:eye-refresh-outline"
+    }
+  }
+}

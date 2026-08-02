@@ -1,0 +1,27 @@
+[project]
+name = "ha-desktop-widget-companion"
+version = "0.1.0"
+description = "Home Assistant coordinator for HA Desktop Widget clients"
+requires-python = ">=3.14"
+
+[tool.pytest.ini_options]
+addopts = "--strict-markers --cov=custom_components.ha_desktop_widget --cov-report=term-missing"
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.coverage.run]
+branch = true
+
+[tool.coverage.report]
+fail_under = 90
+show_missing = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+
+[tool.ruff.lint]
+select = ["ASYNC", "B", "E", "F", "I", "RUF", "UP"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["custom_components.ha_desktop_widget"]

@@ -1,0 +1,12 @@
+{
+  "domain": "ha_desktop_widget",
+  "name": "HA Desktop Widget",
+  "codeowners": ["@Robertg761"],
+  "config_flow": true,
+  "documentation": "https://github.com/Robertg761/HA-Desktop-Widget-Companion",
+  "integration_type": "hub",
+  "iot_class": "local_push",
+  "issue_tracker": "https://github.com/Robertg761/HA-Desktop-Widget-Companion/issues",
+  "requirements": [],
+  "version": "0.1.0"
+}

@@ -1,0 +1,76 @@
+{
+  "config": {
+    "abort": {
+      "already_configured": "HA Desktop Widget is already configured."
+    },
+    "step": {
+      "user": {
+        "description": "Create the Home Assistant coordinator for HA Desktop Widget. No token or desktop address is needed here. After setup, use Connect with Home Assistant in the desktop app to authorize and register each computer.",
+        "title": "Set up HA Desktop Widget"
+      }
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "connected": {
+        "name": "Connected"
+      }
+    },
+    "sensor": {
+      "current_page": {
+        "name": "Current page"
+      }
+    },
+    "switch": {
+      "widget": {
+        "name": "Widget"
+      }
+    }
+  },
+  "services": {
+    "hide": {
+      "description": "Hide the widget on one or more connected desktops.",
+      "fields": {
+        "device_id": {
+          "description": "Registered desktops to control.",
+          "name": "Desktops"
+        }
+      },
+      "name": "Hide widget"
+    },
+    "show": {
+      "description": "Show the widget on one or more connected desktops.",
+      "fields": {
+        "device_id": {
+          "description": "Registered desktops to control.",
+          "name": "Desktops"
+        }
+      },
+      "name": "Show widget"
+    },
+    "switch_page": {
+      "description": "Switch one or more connected desktops to a named page.",
+      "fields": {
+        "device_id": {
+          "description": "Registered desktops to control.",
+          "name": "Desktops"
+        },
+        "page_id": {
+          "description": "Stable page or tab identifier understood by the desktop.",
+          "name": "Page ID"
+        }
+      },
+      "name": "Switch page"
+    },
+    "toggle": {
+      "description": "Toggle widget visibility on one or more connected desktops.",
+      "fields": {
+        "device_id": {
+          "description": "Registered desktops to control.",
+          "name": "Desktops"
+        }
+      },
+      "name": "Toggle widget"
+    }
+  }
+}

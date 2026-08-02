@@ -1,0 +1,35 @@
+show:
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          integration: ha_desktop_widget
+
+hide:
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          integration: ha_desktop_widget
+
+toggle:
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          integration: ha_desktop_widget
+
+switch_page:
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          integration: ha_desktop_widget
+    page_id:
+      required: true
+      selector:
+        text:
