@@ -25,18 +25,29 @@ Named profiles, revision-controlled assignments, and `apply_profile` are the nex
 slices. The integration does not render the widget and does not expose an arbitrary remote-execution
 API.
 
-## Installation
+## Set up HA Desktop Widget
 
-### HACS custom repository
+There are two separate things to install:
+
+1. The **HA Desktop Widget Companion integration** in Home Assistant. It lets Home Assistant
+   manage your computers.
+2. The **HA Desktop Widget desktop app** on every computer you want to connect. It displays the
+   widget and connects that computer to Home Assistant.
+
+### 1. Install the Home Assistant Companion integration
+
+#### HACS custom repository
 
 1. In HACS, open the three-dot menu and select **Custom repositories**.
 2. Add `https://github.com/Robertg761/HA-Desktop-Widget-Companion` with category
    **Integration**.
-3. Install **HA Desktop Widget**, then restart Home Assistant.
-4. Go to **Settings > Devices & services > Add integration**.
-5. Search for **HA Desktop Widget** and confirm setup.
+3. Install **HA Desktop Widget**. This installs the Home Assistant Companion integration, not the
+   desktop app.
+4. Restart Home Assistant.
+5. Go to **Settings > Devices & services > Add integration**.
+6. Search for **HA Desktop Widget** and confirm setup.
 
-### Manual installation
+#### Manual installation
 
 1. Copy `custom_components/ha_desktop_widget` into the same path under your Home Assistant
    configuration directory.
@@ -44,8 +55,16 @@ API.
 3. Go to **Settings > Devices & services > Add integration**.
 4. Search for **HA Desktop Widget** and confirm setup.
 
-The integration can be configured with zero desktops. A compatible desktop client must then use
-the authenticated commands documented in [docs/protocol.md](docs/protocol.md).
+### 2. Install the desktop app on each computer
+
+1. Open the [HA Desktop Widget Releases page](https://github.com/Robertg761/HA-Desktop-Widget/releases).
+2. Choose the download that matches your computer's operating system.
+3. Open the downloaded file and install the **HA Desktop Widget** desktop app.
+4. Open the app and choose **Connect with Home Assistant**.
+5. Follow the sign-in and approval prompts to connect that computer.
+
+The Companion integration can be set up before any computers are connected. Install HA Desktop
+Widget `v3.9.0-beta.1` or newer for each computer you want to manage.
 
 ## Beta scope
 

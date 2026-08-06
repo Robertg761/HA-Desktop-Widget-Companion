@@ -5,7 +5,7 @@
     },
     "step": {
       "user": {
-        "description": "Create the Home Assistant coordinator for HA Desktop Widget. No token or desktop address is needed here. After setup, use Connect with Home Assistant in the desktop app to authorize and register each computer.",
+        "description": "Set up the Home Assistant Companion integration for HA Desktop Widget. This does not install the desktop app. On each computer, download and install HA Desktop Widget from https://github.com/Robertg761/HA-Desktop-Widget/releases, then open the app and choose Connect with Home Assistant.",
         "title": "Set up HA Desktop Widget"
       }
     }
