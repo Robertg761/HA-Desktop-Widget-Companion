@@ -1,0 +1,84 @@
+name: Release
+
+# Run manually from the Actions tab (or the API) after the version bump is merged to main.
+# It tags main as v<version> and publishes a GitHub release with that version's CHANGELOG notes.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to release, without a leading v (must match manifest.json and pyproject.toml)
+        required: true
+        type: string
+      extra_notes:
+        description: Optional text placed above the CHANGELOG notes
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require main
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "Releases are cut from main, not ${GITHUB_REF}." >&2
+          exit 1
+
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check version
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
+            echo "Version must look like 1.2.3 or 1.2.3-beta.1, got '$VERSION'." >&2
+            exit 1
+          fi
+          manifest="$(jq -r .version custom_components/ha_desktop_widget/manifest.json)"
+          pyproject="$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')"
+          for pair in "manifest.json:$manifest" "pyproject.toml:$pyproject"; do
+            if [ "${pair#*:}" != "$VERSION" ]; then
+              echo "${pair%%:*} is at ${pair#*:}, not $VERSION. Merge the version bump first." >&2
+              exit 1
+            fi
+          done
+          if git rev-parse -q --verify "refs/tags/v$VERSION" >/dev/null; then
+            echo "Tag v$VERSION already exists." >&2
+            exit 1
+          fi
+
+      - name: Build release notes
+        env:
+          VERSION: ${{ inputs.version }}
+          EXTRA_NOTES: ${{ inputs.extra_notes }}
+        run: |
+          {
+            if [ -n "$EXTRA_NOTES" ]; then
+              printf '%s\n\n' "$EXTRA_NOTES"
+            fi
+            scripts/release_notes.sh "$VERSION"
+          } > "$RUNNER_TEMP/notes.md"
+          cat "$RUNNER_TEMP/notes.md"
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          prerelease=()
+          if [[ "$VERSION" == *-* ]]; then prerelease=(--prerelease); fi
+          gh release create "v$VERSION" \
+            --target "$GITHUB_SHA" \
+            --title "HA Desktop Widget Companion $VERSION" \
+            --notes-file "$RUNNER_TEMP/notes.md" \
+            "${prerelease[@]}"

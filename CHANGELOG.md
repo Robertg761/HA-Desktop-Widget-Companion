@@ -15,7 +15,14 @@ All notable changes to HA Desktop Widget Companion will be documented in this fi
   `scripts/update_preview.sh` to refresh it from a desktop release.
 - `ha_desktop_widget/subscribe_updates`, an admin-only WebSocket subscription that streams desktop
   and profile summaries whenever they change.
+- `ha_desktop_widget/profiles/save` accepts optional `expected_revision` and `expected_name` and
+  answers `revision_conflict` when the profile changed since it was loaded, so concurrent editors
+  cannot silently revert each other's saves or renames.
+- Desktop summaries include `snapshot_updated_at`, so frontends can tell when a desktop reported a
+  newer layout.
 - Playwright browser tests for the panel, run in CI against the real preview bundle.
+- A release workflow that tags `main` and publishes a GitHub release from the matching
+  CHANGELOG section.
 
 ## [0.2.0] - 2026-09-26
 
