@@ -24,6 +24,8 @@ from .const import (
     DATA_RUNTIMES,
     DOMAIN,
     MAX_PROFILES,
+    MAX_SNAPSHOTS,
+    MAX_SNAPSHOTS_PER_OWNER,
     PERSIST_DEBOUNCE_SECONDS,
     PROFILE_SCHEMA_VERSION,
     PROFILE_STORE_VERSION,
@@ -346,9 +348,33 @@ class HADesktopWidgetRuntime:
         current = self.snapshots.get(desktop_id)
         if current is not None and current["document"] == validated:
             return
+        if current is None:
+            self._make_room_for_snapshot(self.desktops[desktop_id].owner_user_id)
         self.snapshots[desktop_id] = {"document": validated, "updated_at": utcnow_iso()}
         await self.async_save_profiles()
         self._notify()
+
+    def _make_room_for_snapshot(self, owner_user_id: str) -> None:
+        """Keep snapshot storage bounded however many desktop IDs are registered.
+
+        A user's own oldest snapshot makes way for their newest one, so no user can evict
+        another's; past the global limit new snapshots are refused instead.
+        """
+        owned = sorted(
+            (
+                (snapshot["updated_at"], desktop_id)
+                for desktop_id, snapshot in self.snapshots.items()
+                if (record := self.desktops.get(desktop_id)) is not None
+                and record.owner_user_id == owner_user_id
+            ),
+        )
+        while len(owned) >= MAX_SNAPSHOTS_PER_OWNER:
+            _, oldest = owned.pop(0)
+            self.snapshots.pop(oldest, None)
+        if len(self.snapshots) >= MAX_SNAPSHOTS:
+            raise ProfileError(
+                f"Home Assistant already stores the maximum of {MAX_SNAPSHOTS} desktop layouts"
+            )
 
     @callback
     def async_acknowledge_command(
@@ -603,13 +629,19 @@ class HADesktopWidgetRuntime:
             if profile is None or not (force or self.profile_out_of_date(desktop_id)):
                 return False
             target = (profile.profile_id, profile.revision)
+            session = self.sessions.get(desktop_id)
             try:
                 await self.async_apply_profile(desktop_id, profile)
             except DesktopUnavailableError:
                 raise
             except HomeAssistantError:
-                self._sync_failures[desktop_id] = target
+                # A replacement session gets its own retry, so only remember failures from
+                # the session that is still live.
+                if self.sessions.get(desktop_id) is session:
+                    self._sync_failures[desktop_id] = target
                 raise
+            if self.sessions.get(desktop_id) is not session:
+                return True
             if self._sync_target(desktop_id) == target and self.profile_out_of_date(desktop_id):
                 self._sync_failures[desktop_id] = target
                 _LOGGER.warning(

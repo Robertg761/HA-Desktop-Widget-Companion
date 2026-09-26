@@ -75,6 +75,10 @@ PROFILE_SECTION_KEYS = frozenset(
     }
 )
 MAX_PROFILES = 100
+# Snapshots are written by desktops, so bound what any one Home Assistant user's desktops can store
+# and the total, independently of how many desktop IDs get registered.
+MAX_SNAPSHOTS_PER_OWNER = 10
+MAX_SNAPSHOTS = 100
 MAX_PROFILE_DOCUMENT_BYTES = 256 * 1024
 MAX_PROFILE_DOCUMENT_DEPTH = 12
 

@@ -109,7 +109,9 @@ continuously. The same `state` object may be attached to an acknowledgement.
 
 The desktop may report the shareable part of its current configuration so an administrator can
 capture it as a profile. Only the active subscription connection can report a snapshot, and
-identical snapshots are not re-stored.
+identical snapshots are not re-stored. Home Assistant keeps at most 10 snapshots from the
+desktops of one Home Assistant user, replacing that user's oldest, and at most 100 in total; past
+the total it refuses new snapshots with `invalid_profile`.
 
 ```json
 {

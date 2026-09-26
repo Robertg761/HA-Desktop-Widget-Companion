@@ -258,7 +258,7 @@ async def websocket_put_config_snapshot(
         await runtime.async_put_config_snapshot(
             msg["desktop_id"], connection=connection, document=msg["document"]
         )
-    except (DesktopUnavailableError, ProfileDocumentError) as error:
+    except (DesktopUnavailableError, ProfileDocumentError, ProfileError) as error:
         _send_domain_error(connection, msg["id"], error)
         return
     connection.send_result(msg["id"])

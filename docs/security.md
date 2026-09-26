@@ -11,6 +11,8 @@
   including every profile action, are admin-only in protocol v1; Home Assistant system and
   automation contexts remain available. The standard widget switch and profile select continue to
   use Home Assistant entity permissions.
+- Stored layout snapshots are bounded per Home Assistant user and in total, so a desktop credential
+  cannot grow storage without limit or evict another user's snapshots.
 - Profile and snapshot administration over the WebSocket API is admin-only. A desktop session can
   only report its own snapshot and never read profiles or other desktops' snapshots.
 - Integration storage contains metadata, last-known UI state, profiles, and layout snapshots, never

@@ -284,6 +284,66 @@ async def test_snapshot_and_capture(hass: HomeAssistant) -> None:
     assert runtime.get_snapshot(DESKTOP_ID) is None
 
 
+async def test_snapshot_storage_is_bounded(hass: HomeAssistant) -> None:
+    """One user's desktops rotate their own snapshots; past the global cap, new ones are refused."""
+    runtime = await _setup_entry(hass)
+    ids = [f"desktop-owner1-{index}" for index in range(3)]
+    for desktop_id in ids:
+        await _register(runtime, desktop_id)
+    await runtime.async_register_desktop(
+        {"desktop_id": LAPTOP_ID, "name": "Laptop", "protocol_version": 1},
+        user_id="user-2",
+        is_admin=False,
+    )
+
+    with (
+        patch("custom_components.ha_desktop_widget.runtime.MAX_SNAPSHOTS_PER_OWNER", 2),
+        patch("custom_components.ha_desktop_widget.runtime.MAX_SNAPSHOTS", 2),
+    ):
+        for index, desktop_id in enumerate(ids):
+            connection = _connect(runtime, desktop_id)
+            await runtime.async_put_config_snapshot(
+                desktop_id, connection=connection, document={"opacity": 0.5 + index / 10}
+            )
+            runtime.snapshots[desktop_id]["updated_at"] = f"2026-01-0{index + 1}"
+        assert sorted(runtime.snapshots) == sorted(ids[1:])
+
+        laptop = FakeConnection()
+        runtime.async_subscribe_commands(
+            LAPTOP_ID, connection=laptop, subscription_id=8, user_id="user-2", is_admin=False
+        )
+        with pytest.raises(ProfileError, match="maximum of 2"):
+            await runtime.async_put_config_snapshot(
+                LAPTOP_ID, connection=laptop, document=DOCUMENT
+            )
+        # Updating an existing snapshot is always allowed.
+        await runtime.async_put_config_snapshot(
+            ids[2], connection=_connect(runtime, ids[2]), document=DOCUMENT
+        )
+    assert runtime.get_snapshot(ids[2])["document"] == DOCUMENT
+    await runtime.async_shutdown()
+
+
+async def test_reconnect_retries_despite_failure_from_old_session(hass: HomeAssistant) -> None:
+    """A push that failed on a replaced session does not block the new session's retry."""
+    runtime = await _setup_entry(hass)
+    await _register(runtime)
+    profile = await runtime.async_save_profile(name="Office", document=DOCUMENT)
+    await runtime.async_assign_profile(DESKTOP_ID, profile.profile_id)
+    old = _connect(runtime)
+    runtime.async_report_state(DESKTOP_ID, connection=old, state={})
+    await asyncio.sleep(0)
+
+    _ack(runtime, old, old.commands("apply_profile")[-1], status="failed")
+    new = _connect(runtime)
+    for _ in range(5):
+        await asyncio.sleep(0)
+    runtime.async_report_state(DESKTOP_ID, connection=new, state={})
+    await asyncio.sleep(0)
+    assert len(new.commands("apply_profile")) == 1
+    await runtime.async_shutdown()
+
+
 async def test_assignment_converges_online_desktop(hass: HomeAssistant) -> None:
     """Assigned desktops receive each new revision until they report having applied it."""
     runtime = await _setup_entry(hass)
