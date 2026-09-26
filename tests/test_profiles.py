@@ -391,6 +391,94 @@ async def test_sync_follows_revision_changed_mid_flight(hass: HomeAssistant) -> 
     await runtime.async_shutdown()
 
 
+async def test_acknowledged_state_triggers_sync(hass: HomeAssistant) -> None:
+    """Drift reported on any acknowledgement starts convergence without waiting for a heartbeat."""
+    runtime = await _setup_entry(hass)
+    await _register(runtime)
+    profile = await runtime.async_save_profile(name="Office", document=DOCUMENT)
+    await runtime.async_assign_profile(DESKTOP_ID, profile.profile_id)
+    connection = _connect(runtime)
+
+    show = hass.async_create_task(runtime.async_dispatch_command(DESKTOP_ID, "show"))
+    await asyncio.sleep(0)
+    _ack(runtime, connection, connection.commands("show")[-1], state={"visible": True})
+    await show
+    await asyncio.sleep(0)
+    assert len(connection.commands("apply_profile")) == 1
+    await runtime.async_shutdown()
+
+
+async def test_forced_sync_without_reported_revision_is_not_repeated(
+    hass: HomeAssistant,
+) -> None:
+    """A forced push acknowledged without the revision is not pushed again by heartbeats."""
+    runtime = await _setup_entry(hass)
+    await _register(runtime)
+    profile = await runtime.async_save_profile(name="Office", document=DOCUMENT)
+    await runtime.async_assign_profile(DESKTOP_ID, profile.profile_id)
+    connection = _connect(runtime)
+
+    forced = hass.async_create_task(runtime.async_sync_profile(DESKTOP_ID, force=True))
+    await asyncio.sleep(0)
+    _ack(runtime, connection, connection.commands("apply_profile")[-1], state={})
+    assert await forced
+    runtime.async_report_state(DESKTOP_ID, connection=connection, state={})
+    await asyncio.sleep(0)
+    assert len(connection.commands("apply_profile")) == 1
+    await runtime.async_shutdown()
+
+
+async def test_forced_sync_waits_for_background_push(hass: HomeAssistant) -> None:
+    """An explicit apply queues behind an in-flight push so the two cannot finish out of order."""
+    runtime = await _setup_entry(hass)
+    await _register(runtime)
+    office = await runtime.async_save_profile(name="Office", document=DOCUMENT)
+    kitchen = await runtime.async_save_profile(name="Kitchen", document={"opacity": 0.5})
+    await runtime.async_assign_profile(DESKTOP_ID, office.profile_id)
+    connection = _connect(runtime)
+    runtime.async_report_state(DESKTOP_ID, connection=connection, state={})
+    await asyncio.sleep(0)
+    background = connection.commands("apply_profile")[-1]
+
+    await runtime.async_assign_profile(DESKTOP_ID, kitchen.profile_id)
+    forced = hass.async_create_task(runtime.async_sync_profile(DESKTOP_ID, force=True))
+    await asyncio.sleep(0)
+    assert len(connection.commands("apply_profile")) == 1
+
+    _ack(runtime, connection, background)
+    for _ in range(5):
+        await asyncio.sleep(0)
+    (_, latest) = connection.commands("apply_profile")
+    assert latest["payload"]["profile_id"] == kitchen.profile_id
+    _ack(runtime, connection, latest)
+    assert await forced
+    await hass.async_block_till_done()
+    assert runtime.get_desktop(DESKTOP_ID).active_profile_id == kitchen.profile_id
+    assert len(connection.commands("apply_profile")) == 2
+    await runtime.async_shutdown()
+
+
+async def test_current_revision_follows_failed_obsolete_push(hass: HomeAssistant) -> None:
+    """When a superseded revision fails, the current one is still pushed straight away."""
+    runtime = await _setup_entry(hass)
+    await _register(runtime)
+    profile = await runtime.async_save_profile(name="Office", document=DOCUMENT)
+    await runtime.async_assign_profile(DESKTOP_ID, profile.profile_id)
+    connection = _connect(runtime)
+    runtime.async_report_state(DESKTOP_ID, connection=connection, state={})
+    await asyncio.sleep(0)
+    obsolete = connection.commands("apply_profile")[-1]
+
+    await runtime.async_save_profile(
+        name="Office", document={"opacity": 0.6}, profile_id=profile.profile_id
+    )
+    _ack(runtime, connection, obsolete, status="failed")
+    for _ in range(5):
+        await asyncio.sleep(0)
+    assert connection.commands("apply_profile")[-1]["payload"]["revision"] == 2
+    await runtime.async_shutdown()
+
+
 async def test_assignment_validation_and_delete(hass: HomeAssistant) -> None:
     """Assignments require a known profile and capable desktop; deletion clears them."""
     runtime = await _setup_entry(hass)

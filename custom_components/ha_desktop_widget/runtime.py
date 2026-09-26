@@ -88,7 +88,9 @@ class HADesktopWidgetRuntime:
         self._connection_desktops: dict[int, str] = {}
         self._listeners: set[Callable[[], None]] = set()
         self._cancel_save: CALLBACK_TYPE | None = None
-        self._syncing: set[str] = set()
+        # Profile pushes to one desktop are serialized so they cannot complete out of order.
+        self._sync_locks: dict[str, asyncio.Lock] = {}
+        self._sync_scheduled: set[str] = set()
         self._sync_failures: dict[str, tuple[str, int]] = {}
         self._sync_tasks: set[asyncio.Task[None]] = set()
 
@@ -365,6 +367,7 @@ class HADesktopWidgetRuntime:
             self.desktops[desktop_id].apply_state(state)
             self.async_schedule_save()
             self._notify()
+            self.async_request_profile_sync(desktop_id)
         future = session.pending.get(command_id)
         if future is None or future.done():
             return
@@ -425,6 +428,7 @@ class HADesktopWidgetRuntime:
         if session is not None:
             self._remove_session(desktop_id, session, "Desktop registration was removed")
         self._sync_failures.pop(desktop_id, None)
+        self._sync_locks.pop(desktop_id, None)
         await self.async_save()
         if self.snapshots.pop(desktop_id, None) is not None:
             await self.async_save_profiles()
@@ -580,76 +584,88 @@ class HADesktopWidgetRuntime:
             },
         )
 
+    def _sync_target(self, desktop_id: str) -> tuple[str, int] | None:
+        profile = self.assigned_profile(desktop_id)
+        return (profile.profile_id, profile.revision) if profile else None
+
+    def _sync_lock(self, desktop_id: str) -> asyncio.Lock:
+        return self._sync_locks.setdefault(desktop_id, asyncio.Lock())
+
+    async def _async_push_assigned(self, desktop_id: str, *, force: bool) -> bool:
+        """Push the assigned profile under the desktop's sync lock.
+
+        Drift is re-checked once the lock is held, because an earlier push may have finished
+        the job. A revision that fails, or that the desktop acknowledges without reporting it
+        applied, is remembered so it is not pushed again on every heartbeat.
+        """
+        async with self._sync_lock(desktop_id):
+            profile = self.assigned_profile(desktop_id)
+            if profile is None or not (force or self.profile_out_of_date(desktop_id)):
+                return False
+            target = (profile.profile_id, profile.revision)
+            try:
+                await self.async_apply_profile(desktop_id, profile)
+            except DesktopUnavailableError:
+                raise
+            except HomeAssistantError:
+                self._sync_failures[desktop_id] = target
+                raise
+            if self._sync_target(desktop_id) == target and self.profile_out_of_date(desktop_id):
+                self._sync_failures[desktop_id] = target
+                _LOGGER.warning(
+                    "Desktop %s acknowledged profile %s revision %s but did not report applying it",
+                    desktop_id,
+                    profile.name,
+                    profile.revision,
+                )
+            else:
+                self._sync_failures.pop(desktop_id, None)
+            return True
+
     async def async_sync_profile(self, desktop_id: str, *, force: bool = False) -> bool:
         """Push the assigned profile when the desktop is behind it, or always when forced.
 
-        Returns whether a push was acknowledged. Errors propagate to the caller.
+        Waits for any push already in flight. Returns whether a push was acknowledged; errors
+        propagate to the caller.
         """
-        profile = self.assigned_profile(desktop_id)
-        if profile is None or not (force or self.profile_out_of_date(desktop_id)):
-            return False
-        self._syncing.add(desktop_id)
         try:
-            await self.async_apply_profile(desktop_id, profile)
+            return await self._async_push_assigned(desktop_id, force=force)
         finally:
-            self._syncing.discard(desktop_id)
-        self._sync_failures.pop(desktop_id, None)
-        return True
+            # The assignment or revision may have changed while this push was in flight.
+            self.async_request_profile_sync(desktop_id)
 
     @callback
     def async_request_profile_sync(self, desktop_id: str) -> None:
         """Converge an online desktop to its assigned profile revision in the background."""
-        profile = self.assigned_profile(desktop_id)
+        target = self._sync_target(desktop_id)
         if (
-            profile is None
-            or desktop_id in self._syncing
+            target is None
+            or desktop_id in self._sync_scheduled
+            or self._sync_lock(desktop_id).locked()
             or not self.is_online(desktop_id)
             or not self.supports(desktop_id, CAPABILITY_APPLY_PROFILE)
             or not self.profile_out_of_date(desktop_id)
-            or self._sync_failures.get(desktop_id) == (profile.profile_id, profile.revision)
+            or self._sync_failures.get(desktop_id) == target
         ):
             return
-        self._syncing.add(desktop_id)
+        self._sync_scheduled.add(desktop_id)
         task = self.hass.async_create_background_task(
-            self._async_background_sync(desktop_id, profile),
+            self._async_background_sync(desktop_id),
             f"{DOMAIN} profile sync {desktop_id}",
         )
         self._sync_tasks.add(task)
         task.add_done_callback(self._sync_tasks.discard)
 
-    async def _async_background_sync(self, desktop_id: str, profile: ProfileRecord) -> None:
-        target = (profile.profile_id, profile.revision)
+    async def _async_background_sync(self, desktop_id: str) -> None:
         try:
-            await self.async_apply_profile(desktop_id, profile)
+            await self._async_push_assigned(desktop_id, force=False)
         except DesktopUnavailableError:
-            return
+            pass
         except HomeAssistantError as err:
-            self._sync_failures[desktop_id] = target
-            _LOGGER.warning(
-                "Could not apply profile %s revision %s to desktop %s: %s",
-                profile.name,
-                profile.revision,
-                desktop_id,
-                err,
-            )
-            return
+            _LOGGER.warning("Could not apply a profile to desktop %s: %s", desktop_id, err)
         finally:
-            self._syncing.discard(desktop_id)
-
-        current = self.assigned_profile(desktop_id)
-        if current is None or not self.profile_out_of_date(desktop_id):
-            return
-        if (current.profile_id, current.revision) == target:
-            # The desktop acknowledged the push but still reports another revision; stop here
-            # instead of pushing the same revision on every heartbeat.
-            self._sync_failures[desktop_id] = target
-            _LOGGER.warning(
-                "Desktop %s acknowledged profile %s revision %s but did not report applying it",
-                desktop_id,
-                current.name,
-                current.revision,
-            )
-            return
+            self._sync_scheduled.discard(desktop_id)
+        # Follow a revision or assignment that changed while the push was in flight.
         self.async_request_profile_sync(desktop_id)
 
     async def async_shutdown(self) -> None:
