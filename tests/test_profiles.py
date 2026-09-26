@@ -77,12 +77,13 @@ async def _register(
     runtime: HADesktopWidgetRuntime,
     desktop_id: str = DESKTOP_ID,
     *,
+    name: str = "Office",
     capabilities: list[str] | None = None,
 ) -> None:
     await runtime.async_register_desktop(
         {
             "desktop_id": desktop_id,
-            "name": "Office",
+            "name": name,
             "platform": "linux",
             "app_version": "3.9.0",
             "protocol_version": 1,
@@ -1109,7 +1110,7 @@ async def test_commands_to_several_desktops_run_concurrently(hass: HomeAssistant
     """One slow desktop does not delay commands to the others."""
     runtime = await _setup_entry(hass)
     await _register(runtime)
-    await _register(runtime, LAPTOP_ID)
+    await _register(runtime, LAPTOP_ID, name="Laptop")
     await hass.async_block_till_done()
     office_connection = _connect(runtime)
     laptop_connection = _connect(runtime, LAPTOP_ID)
@@ -1128,5 +1129,6 @@ async def test_commands_to_several_desktops_run_concurrently(hass: HomeAssistant
     laptop_command = laptop_connection.commands("show")[-1]
     _ack(runtime, office_connection, office_command)
     _ack(runtime, laptop_connection, laptop_command, desktop_id=LAPTOP_ID, status="failed")
-    with pytest.raises(HomeAssistantError, match=f"{LAPTOP_ID}: desktop refused"):
+    # Failures name the desktop the way Home Assistant shows it, not by its internal ID.
+    with pytest.raises(HomeAssistantError, match=r"^Laptop: desktop refused"):
         await task

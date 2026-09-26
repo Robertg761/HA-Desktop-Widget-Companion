@@ -102,7 +102,16 @@ def _loaded_runtime(hass: HomeAssistant) -> HADesktopWidgetRuntime:
     return runtime
 
 
+def _desktop_label(hass: HomeAssistant, desktop_id: str) -> str:
+    """Name a desktop in error messages the way the user sees it in Home Assistant."""
+    device = dr.async_get(hass).async_get_device(identifiers={(DOMAIN, desktop_id)})
+    if device is not None and (name := device.name_by_user or device.name):
+        return name
+    return desktop_id
+
+
 async def _run_for_targets(
+    hass: HomeAssistant,
     desktop_ids: list[str],
     operation: Callable[[str], Awaitable[Any]],
 ) -> None:
@@ -113,7 +122,7 @@ async def _run_for_targets(
     errors: list[str] = []
     for desktop_id, result in zip(desktop_ids, results, strict=True):
         if isinstance(result, HomeAssistantError):
-            errors.append(f"{desktop_id}: {result}")
+            errors.append(f"{_desktop_label(hass, desktop_id)}: {result}")
         elif isinstance(result, BaseException):
             raise result
     if errors:
@@ -146,7 +155,7 @@ async def _dispatch_to_targets(
             raise HomeAssistantError(f"capability {capability} is not supported")
         await runtime.async_dispatch_command(desktop_id, action, payload)
 
-    await _run_for_targets(desktop_ids, dispatch)
+    await _run_for_targets(hass, desktop_ids, dispatch)
 
 
 def _handler(
@@ -187,7 +196,7 @@ async def _handle_apply_profile(hass: HomeAssistant, call: ServiceCall) -> None:
         if runtime.is_online(desktop_id):
             await runtime.async_sync_profile(desktop_id, force=True)
 
-    await _run_for_targets(desktop_ids, apply)
+    await _run_for_targets(hass, desktop_ids, apply)
 
 
 async def _handle_unassign_profile(hass: HomeAssistant, call: ServiceCall) -> None:
