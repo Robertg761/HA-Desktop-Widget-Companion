@@ -37,6 +37,7 @@ from custom_components.ha_desktop_widget.models import (
 from custom_components.ha_desktop_widget.runtime import (
     DesktopUnavailableError,
     HADesktopWidgetRuntime,
+    ProfileConflictError,
     ProfileError,
 )
 
@@ -232,6 +233,27 @@ async def test_profile_crud_and_revisions(hass: HomeAssistant) -> None:
     )
     assert retyped.revision == 4
 
+    with pytest.raises(ProfileConflictError, match="now at revision 4"):
+        await runtime.async_save_profile(
+            name="Study", document={}, profile_id=profile.profile_id, expected_revision=3
+        )
+    with pytest.raises(ProfileConflictError):
+        await runtime.async_save_profile(
+            name="Study",
+            document={},
+            profile_id=profile.profile_id,
+            expected_revision=4,
+            expected_name="Office",
+        )
+    current = await runtime.async_save_profile(
+        name="Study",
+        document={"opacity": 0.6},
+        profile_id=profile.profile_id,
+        expected_revision=4,
+        expected_name="Study",
+    )
+    assert current.revision == 5
+
     await runtime.async_save_profile(name="Kitchen", document={})
     for kwargs, message in (
         ({"name": "kitchen", "document": {}}, "already exists"),
@@ -279,6 +301,8 @@ async def test_snapshot_and_capture(hass: HomeAssistant) -> None:
         )
     assert save.await_count == 1
     assert runtime.get_snapshot(DESKTOP_ID)["document"] == DOCUMENT
+    summary = runtime.desktop_summary(runtime.get_desktop(DESKTOP_ID))
+    assert summary["snapshot_updated_at"] == runtime.get_snapshot(DESKTOP_ID)["updated_at"]
 
     captured = await runtime.async_capture_profile(DESKTOP_ID, name="Office")
     assert captured.document == DOCUMENT
@@ -808,6 +832,16 @@ async def test_admin_profile_commands(hass: HomeAssistant, hass_ws_client: Any) 
         {"type": "ha_desktop_widget/profiles/save", "name": "Other", "document": {"x": 1}}
     )
     assert bad["error"]["code"] == "invalid_profile"
+    stale = await call(
+        {
+            "type": "ha_desktop_widget/profiles/save",
+            "profile_id": profile_id,
+            "expected_revision": 5,
+            "name": "Office",
+            "document": {},
+        }
+    )
+    assert stale["error"]["code"] == "revision_conflict"
 
     listed = await call({"type": "ha_desktop_widget/profiles/list"})
     assert listed["result"]["profiles"][0]["sections"] == ["opacity", "ui"]

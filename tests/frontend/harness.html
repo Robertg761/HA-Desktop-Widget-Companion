@@ -1,0 +1,203 @@
+<!doctype html>
+<!--
+  Test harness for the Desktop Widgets panel: mounts the real panel module and preview bundle
+  against an in-memory fake of the Home Assistant connection. Used by panel.spec.mjs.
+-->
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Desktop Widgets panel harness</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+      }
+      :root {
+        --primary-background-color: #fafafa;
+        --secondary-background-color: #f0f0f0;
+        --card-background-color: #fff;
+        --primary-text-color: #212121;
+        --secondary-text-color: #727272;
+        --primary-color: #03a9f4;
+        --text-primary-color: #fff;
+        --divider-color: #e0e0e0;
+      }
+      ha-desktop-widget-panel {
+        display: block;
+        height: 100vh;
+      }
+    </style>
+  </head>
+  <body>
+    <script type="module">
+      import '/custom_components/ha_desktop_widget/frontend/panel.js';
+
+      const now = new Date().toISOString();
+      const entity = (entity_id, state, attributes = {}) => ({
+        entity_id,
+        state,
+        attributes,
+        last_changed: now,
+        last_updated: now,
+        context: { id: 'harness' },
+      });
+      const states = {
+        'light.desk': entity('light.desk', 'on', { friendly_name: 'Desk lamp', brightness: 180 }),
+        'sensor.temperature': entity('sensor.temperature', '21.5', {
+          friendly_name: 'Office temperature',
+          unit_of_measurement: '°C',
+        }),
+        'switch.fan': entity('switch.fan', 'off', { friendly_name: 'Fan' }),
+      };
+      const db = {
+        profiles: {
+          names: {
+            profile_id: 'names',
+            name: 'Named tiles',
+            revision: 1,
+            document: { customEntityNames: { 'light.desk': 'Reading lamp' } },
+            created_at: now,
+            updated_at: now,
+          },
+          evening: {
+            profile_id: 'evening',
+            name: 'Evening',
+            revision: 2,
+            document: { ui: { theme: 'light' } },
+            created_at: now,
+            updated_at: now,
+          },
+        },
+        desktops: [
+          {
+            desktop_id: 'desktop-office1',
+            name: 'Office PC',
+            platform: 'linux',
+            app_version: '3.11.0',
+            online: true,
+            capabilities: ['visibility', 'switch_page', 'apply_profile'],
+            assigned_profile_id: null,
+            profile_out_of_date: false,
+            has_snapshot: true,
+            snapshot_updated_at: now,
+            window_width: 460,
+            window_height: 700,
+          },
+          {
+            desktop_id: 'desktop-laptop1',
+            name: 'Old laptop',
+            platform: 'win32',
+            app_version: '3.8.0',
+            online: false,
+            capabilities: ['visibility'],
+            assigned_profile_id: null,
+            profile_out_of_date: false,
+            has_snapshot: false,
+          },
+        ],
+        snapshots: {
+          'desktop-office1': {
+            updated_at: now,
+            document: {
+              ui: { theme: 'dark', accent: 'teal' },
+              primaryCards: ['time', 'weather'],
+              customTabs: [
+                { id: 'office', name: 'Office', entityIds: ['light.desk', 'sensor.temperature'] },
+              ],
+              activeTabId: 'office',
+              favoriteEntities: ['light.desk', 'sensor.temperature'],
+              opacity: 0.95,
+            },
+          },
+        },
+        calls: [],
+      };
+
+      let listener = null;
+      const summary = ({ document, ...rest }) => ({ ...rest, sections: Object.keys(document).sort() });
+      const emit = () =>
+        listener?.({
+          desktops: structuredClone(db.desktops),
+          profiles: Object.values(db.profiles).map(summary),
+        });
+      let nextId = 1;
+      const handlers = {
+        'profiles/get': async (msg) => {
+          // Read before any delay, like a response already on its way.
+          const profile = structuredClone(db.profiles[msg.profile_id]);
+          if (db.getDelayMs) await new Promise((resolve) => setTimeout(resolve, db.getDelayMs));
+          if (!profile) throw { code: 'not_found', message: 'Profile was not found' };
+          return profile;
+        },
+        'desktops/get_snapshot': (msg) => db.snapshots[msg.desktop_id],
+        'profiles/save': (msg) => {
+          let profile = msg.profile_id ? db.profiles[msg.profile_id] : null;
+          const moved =
+            (msg.expected_revision !== undefined && profile?.revision !== msg.expected_revision) ||
+            (msg.expected_name !== undefined && profile?.name !== msg.expected_name);
+          if (profile && moved) {
+            throw {
+              code: 'revision_conflict',
+              message: `${profile.name} was changed elsewhere and is now at revision ${profile.revision}; reload it before saving`,
+            };
+          }
+          if (!profile) {
+            profile = { profile_id: `new${nextId++}`, revision: 1, created_at: now, document: {} };
+            db.profiles[profile.profile_id] = profile;
+          } else if (JSON.stringify(profile.document) !== JSON.stringify(msg.document)) {
+            profile.revision += 1;
+          }
+          Object.assign(profile, { name: msg.name, document: msg.document, updated_at: now });
+          return profile;
+        },
+        'profiles/delete': (msg) => {
+          delete db.profiles[msg.profile_id];
+          return null;
+        },
+        'desktops/assign_profile': (msg) => {
+          const desktop = db.desktops.find((item) => item.desktop_id === msg.desktop_id);
+          desktop.assigned_profile_id = msg.profile_id;
+          desktop.profile_out_of_date = !!msg.profile_id;
+          return desktop;
+        },
+      };
+      const hass = {
+        states,
+        connection: {
+          subscribeMessage: async (callback, msg) => {
+            db.calls.push(msg);
+            listener = callback;
+            setTimeout(emit, 0);
+            return () => {
+              listener = null;
+            };
+          },
+        },
+        callWS: async (msg) => {
+          db.calls.push(structuredClone(msg));
+          if (db.delayMs) await new Promise((resolve) => setTimeout(resolve, db.delayMs));
+          if (db.failNext === msg.type) {
+            db.failNext = null;
+            throw { code: 'unknown_error', message: 'Simulated failure' };
+          }
+          const handler = handlers[msg.type.replace('ha_desktop_widget/', '')];
+          if (!handler) throw { code: 'unknown_command', message: msg.type };
+          const result = structuredClone(await handler(structuredClone(msg)));
+          // Like Home Assistant, only changes produce an update event; reads do not.
+          if (!/\/(get|get_snapshot)$/.test(msg.type)) setTimeout(emit, 0);
+          return result;
+        },
+      };
+
+      const panel = document.createElement('ha-desktop-widget-panel');
+      panel.panel = {
+        config: { preview_url: '/custom_components/ha_desktop_widget/frontend/preview/preview.html' },
+      };
+      document.body.appendChild(panel);
+      panel.narrow = new URLSearchParams(location.search).has('narrow');
+      panel.hass = hass;
+      Object.assign(window, { __db: db, __emit: emit, __hass: hass, __panel: panel });
+    </script>
+  </body>
+</html>

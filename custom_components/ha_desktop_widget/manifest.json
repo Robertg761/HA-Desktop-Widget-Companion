@@ -1,7 +1,14 @@
 {
   "domain": "ha_desktop_widget",
   "name": "HA Desktop Widget",
-  "codeowners": ["@Robertg761"],
+  "after_dependencies": [
+    "frontend",
+    "http",
+    "panel_custom"
+  ],
+  "codeowners": [
+    "@Robertg761"
+  ],
   "config_flow": true,
   "documentation": "https://github.com/Robertg761/HA-Desktop-Widget-Companion",
   "integration_type": "hub",

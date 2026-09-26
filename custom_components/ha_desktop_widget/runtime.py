@@ -62,6 +62,10 @@ class ProfileError(HomeAssistantError):
     """Raised when a profile operation is invalid."""
 
 
+class ProfileConflictError(ProfileError):
+    """Raised when a profile changed since the caller loaded it."""
+
+
 @dataclass(slots=True)
 class DesktopSession:
     """A live authenticated desktop command subscription."""
@@ -496,8 +500,15 @@ class HADesktopWidgetRuntime:
         name: str,
         document: Any,
         profile_id: str | None = None,
+        expected_revision: int | None = None,
+        expected_name: str | None = None,
     ) -> ProfileRecord:
-        """Create a profile, or update one and bump its revision when its document changes."""
+        """Create a profile, or update one and bump its revision when its document changes.
+
+        With `expected_revision` and `expected_name`, an update is refused if the profile's
+        document or name changed since the caller loaded it, so an editor cannot silently
+        revert someone else's save. Together they cover every change a profile can take.
+        """
         clean_name = name.strip()[:64]
         if not clean_name:
             raise ProfileError("Profile name must not be empty")
@@ -509,6 +520,14 @@ class HADesktopWidgetRuntime:
         existing = self.profiles.get(profile_id) if profile_id else None
         if profile_id and existing is None:
             raise ProfileError(f"Profile {profile_id} was not found")
+        if existing is not None and (
+            (expected_revision is not None and existing.revision != expected_revision)
+            or (expected_name is not None and existing.name != expected_name.strip())
+        ):
+            raise ProfileConflictError(
+                f"{existing.name} was changed elsewhere and is now at revision "
+                f"{existing.revision}; reload it before saving"
+            )
         clash = self.find_profile_by_name(clean_name)
         if clash is not None and clash is not existing:
             raise ProfileError(f"A profile named {clash.name} already exists")
@@ -783,7 +802,9 @@ class HADesktopWidgetRuntime:
         """Return a desktop's public state together with its profile status."""
         data = record.as_public_dict(online=self.is_online(record.desktop_id))
         data["profile_out_of_date"] = self.profile_out_of_date(record.desktop_id)
-        data["has_snapshot"] = record.desktop_id in self.snapshots
+        snapshot = self.snapshots.get(record.desktop_id)
+        data["has_snapshot"] = snapshot is not None
+        data["snapshot_updated_at"] = snapshot["updated_at"] if snapshot else None
         return data
 
     def diagnostics(self) -> dict[str, Any]:

@@ -19,6 +19,18 @@
   HA tokens or desktop secrets. Diagnostics list profile names and section names but never profile
   or snapshot contents, which can name every entity on a dashboard.
 
+## Admin panel
+
+- The **Desktop Widgets** sidebar panel is registered for administrators only, and every
+  WebSocket command it uses is admin-only.
+- Its JavaScript and the widget preview bundle are served without authentication, as Home
+  Assistant serves all frontend code, because browsers load module scripts and iframes without the
+  bearer token. They contain no configuration, entity data, or credentials; the panel passes
+  entity states into the same-origin preview iframe from the logged-in session.
+- Static responses carry a Content Security Policy that allows only the integration's own scripts,
+  styles, fonts, images, and media, and prevents the preview from being framed by other sites.
+  Requests cannot escape the integration's `frontend` directory.
+
 ## Remote command limits
 
 Protocol v1 permits only:
