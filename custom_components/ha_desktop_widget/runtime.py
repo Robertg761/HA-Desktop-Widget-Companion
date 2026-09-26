@@ -469,9 +469,10 @@ class HADesktopWidgetRuntime:
 
     def find_profile(self, reference: str) -> ProfileRecord | None:
         """Resolve a profile by ID or case-insensitive name."""
-        return self.profiles.get(reference) or self._find_profile_by_name(reference)
+        return self.profiles.get(reference) or self.find_profile_by_name(reference)
 
-    def _find_profile_by_name(self, name: str) -> ProfileRecord | None:
+    def find_profile_by_name(self, name: str) -> ProfileRecord | None:
+        """Resolve a profile by case-insensitive name only."""
         folded = name.strip().casefold()
         return next(
             (profile for profile in self.profiles.values() if profile.name.casefold() == folded),
@@ -508,7 +509,7 @@ class HADesktopWidgetRuntime:
         existing = self.profiles.get(profile_id) if profile_id else None
         if profile_id and existing is None:
             raise ProfileError(f"Profile {profile_id} was not found")
-        clash = self._find_profile_by_name(clean_name)
+        clash = self.find_profile_by_name(clean_name)
         if clash is not None and clash is not existing:
             raise ProfileError(f"A profile named {clash.name} already exists")
         # Actions accept a profile's name or ID, so a name must never be another profile's ID.
@@ -544,7 +545,7 @@ class HADesktopWidgetRuntime:
     def _new_profile_id(self) -> str:
         while True:
             profile_id = uuid4().hex
-            if profile_id not in self.profiles and self._find_profile_by_name(profile_id) is None:
+            if profile_id not in self.profiles and self.find_profile_by_name(profile_id) is None:
                 return profile_id
 
     async def async_capture_profile(self, desktop_id: str, *, name: str) -> ProfileRecord:
@@ -554,7 +555,7 @@ class HADesktopWidgetRuntime:
             raise ProfileError(
                 "This desktop has not reported its layout yet; connect it and try again"
             )
-        existing = self._find_profile_by_name(name)
+        existing = self.find_profile_by_name(name)
         return await self.async_save_profile(
             name=name,
             document=snapshot["document"],
@@ -734,15 +735,35 @@ class HADesktopWidgetRuntime:
         self._sync_tasks.add(task)
         task.add_done_callback(self._sync_tasks.discard)
 
-    async def _async_background_sync(self, desktop_id: str) -> None:
+    @callback
+    def async_request_profile_push(self, desktop_id: str) -> None:
+        """Push the assigned profile in the background even if the desktop already reports it.
+
+        Used when an administrator (re)assigns a profile, which also resets local changes.
+        """
+        if (
+            self.assigned_profile(desktop_id) is None
+            or not self.is_online(desktop_id)
+            or not self.supports(desktop_id, CAPABILITY_APPLY_PROFILE)
+        ):
+            return
+        task = self.hass.async_create_background_task(
+            self._async_background_sync(desktop_id, force=True),
+            f"{DOMAIN} profile push {desktop_id}",
+        )
+        self._sync_tasks.add(task)
+        task.add_done_callback(self._sync_tasks.discard)
+
+    async def _async_background_sync(self, desktop_id: str, *, force: bool = False) -> None:
         try:
-            await self._async_push_assigned(desktop_id, force=False)
+            await self._async_push_assigned(desktop_id, force=force)
         except DesktopUnavailableError:
             pass
         except HomeAssistantError as err:
             _LOGGER.warning("Could not apply a profile to desktop %s: %s", desktop_id, err)
         finally:
-            self._sync_scheduled.discard(desktop_id)
+            if not force:
+                self._sync_scheduled.discard(desktop_id)
         # Follow a revision or assignment that changed while the push was in flight.
         self.async_request_profile_sync(desktop_id)
 

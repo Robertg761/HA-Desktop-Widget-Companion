@@ -331,7 +331,9 @@ async def websocket_desktops_assign_profile(
     except (DesktopUnavailableError, ProfileError) as error:
         _send_domain_error(connection, msg["id"], error)
         return
-    runtime.async_request_profile_sync(msg["desktop_id"])
+    # Like the select and apply_profile action, assigning re-applies the profile, which also
+    # resets changes made on the desktop since it was last applied.
+    runtime.async_request_profile_push(msg["desktop_id"])
     record = runtime.get_desktop(msg["desktop_id"])
     connection.send_result(msg["id"], runtime.desktop_summary(record))
 

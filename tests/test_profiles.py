@@ -855,6 +855,37 @@ async def test_admin_profile_commands(hass: HomeAssistant, hass_ws_client: Any) 
     await client.close()
 
 
+async def test_websocket_assignment_reapplies_profile(
+    hass: HomeAssistant, hass_ws_client: Any
+) -> None:
+    """Reassigning the revision a desktop already reports still pushes it, like the select."""
+    runtime = await _setup_entry(hass)
+    await _register(runtime)
+    profile = await runtime.async_save_profile(name="Office", document=DOCUMENT)
+    connection = _connect(runtime)
+    runtime.async_report_state(
+        DESKTOP_ID,
+        connection=connection,
+        state={"active_profile_id": profile.profile_id, "profile_revision": 1},
+    )
+    client = await hass_ws_client(hass)
+
+    await client.send_json_auto_id(
+        {
+            "type": "ha_desktop_widget/desktops/assign_profile",
+            "desktop_id": DESKTOP_ID,
+            "profile_id": profile.profile_id,
+        }
+    )
+    assert (await client.receive_json())["success"]
+    await asyncio.sleep(0)
+    (command,) = connection.commands("apply_profile")
+    _ack(runtime, connection, command)
+    await hass.async_block_till_done()
+    await client.close()
+    await runtime.async_shutdown()
+
+
 async def test_admin_commands_require_admin(
     hass: HomeAssistant, hass_ws_client: Any, hass_read_only_access_token: str
 ) -> None:
@@ -930,6 +961,23 @@ async def test_profile_services(hass: HomeAssistant) -> None:
     )
     assert runtime.profiles == {}
     await runtime.async_shutdown()
+
+
+async def test_save_profile_service_matches_names_only(hass: HomeAssistant) -> None:
+    """A name equal to a profile ID is refused rather than overwriting that profile."""
+    runtime = await _setup_entry(hass)
+    office = await runtime.async_save_profile(name="Office", document=DOCUMENT)
+
+    with pytest.raises(HomeAssistantError, match="reserved"):
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_SAVE_PROFILE,
+            {ATTR_NAME: office.profile_id, ATTR_DOCUMENT: {"opacity": 0.5}},
+            blocking=True,
+            return_response=True,
+        )
+    assert runtime.profiles[office.profile_id].document == DOCUMENT
+    assert runtime.profiles[office.profile_id].revision == 1
 
 
 async def test_apply_profile_requires_capability(hass: HomeAssistant) -> None:

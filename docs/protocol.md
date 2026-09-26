@@ -206,7 +206,9 @@ Home Assistant frontends use these admin-only commands. Desktops do not need the
 | `ha_desktop_widget/profiles/delete` | `profile_id` | – |
 
 Saving a profile whose document changed increments its revision; renaming does not. Names are
-unique regardless of case.
+unique regardless of case and may not equal another profile's ID. Assigning a profile to an online
+desktop pushes it straight away, even when the desktop already reports that revision, which resets
+changes made on the desktop since.
 
 ## Protocol evolution
 

@@ -211,7 +211,7 @@ async def _handle_save_profile(hass: HomeAssistant, call: ServiceCall) -> Servic
     """Create or replace a named profile from a document."""
     await _require_admin_for_human_call(hass, call)
     runtime = _loaded_runtime(hass)
-    existing = runtime.find_profile(call.data[ATTR_NAME])
+    existing = runtime.find_profile_by_name(call.data[ATTR_NAME])
     profile = await runtime.async_save_profile(
         name=existing.name if existing else call.data[ATTR_NAME],
         document=call.data[ATTR_DOCUMENT],
