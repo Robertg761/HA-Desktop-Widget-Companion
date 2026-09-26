@@ -7,6 +7,8 @@ from homeassistant import config_entries
 
 from .const import CONFIG_ENTRY_UNIQUE_ID, DOMAIN, INTEGRATION_NAME
 
+DESKTOP_RELEASES_URL = "https://github.com/Robertg761/HA-Desktop-Widget/releases"
+
 
 class HADesktopWidgetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Create the singleton Home Assistant coordinator."""
@@ -23,4 +25,8 @@ class HADesktopWidgetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             return self.async_create_entry(title=INTEGRATION_NAME, data={})
 
-        return self.async_show_form(step_id="user", data_schema=vol.Schema({}))
+        return self.async_show_form(
+            step_id="user",
+            data_schema=vol.Schema({}),
+            description_placeholders={"releases_url": DESKTOP_RELEASES_URL},
+        )

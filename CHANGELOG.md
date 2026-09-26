@@ -31,6 +31,7 @@ All notable changes to HA Desktop Widget Companion will be documented in this fi
   timed out in Home Assistant even though the desktop had carried them out. Unknown state fields
   are now ignored instead of rejected.
 - Corrupt stored protocol versions no longer prevent the integration from loading.
+- The setup dialog passes the desktop releases link as a placeholder, as Hassfest requires.
 
 ## [0.1.0] - 2026-08-02
 
