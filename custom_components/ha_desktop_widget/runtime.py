@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -37,6 +38,7 @@ from .models import (
     DesktopRecord,
     ProfileDocumentError,
     ProfileRecord,
+    same_document,
     utcnow_iso,
     validate_profile_document,
 )
@@ -346,7 +348,7 @@ class HADesktopWidgetRuntime:
         self._assert_session(desktop_id, connection)
         validated = validate_profile_document(document)
         current = self.snapshots.get(desktop_id)
-        if current is not None and current["document"] == validated:
+        if current is not None and same_document(current["document"], validated):
             return
         if current is None:
             self._make_room_for_snapshot(self.desktops[desktop_id].owner_user_id)
@@ -515,7 +517,7 @@ class HADesktopWidgetRuntime:
             self.profiles[profile.profile_id] = profile
         else:
             profile = existing
-            if profile.document != validated:
+            if not same_document(profile.document, validated):
                 profile.document = validated
                 profile.revision += 1
             profile.name = clean_name
@@ -543,36 +545,55 @@ class HADesktopWidgetRuntime:
         )
 
     async def async_delete_profile(self, profile_id: str) -> bool:
-        """Delete a profile and clear assignments to it; desktops keep their applied layout."""
-        if self.profiles.pop(profile_id, None) is None:
+        """Delete a profile and clear assignments to it; desktops keep their applied layout.
+
+        Waits for pushes already on their way to the assigned desktops, so none of them changes
+        after the deletion returns.
+        """
+        if profile_id not in self.profiles:
             return False
-        cleared = False
-        for desktop_id, record in self.desktops.items():
-            if record.assigned_profile_id == profile_id:
-                record.assigned_profile_id = None
-                self._sync_failures.pop(desktop_id, None)
-                cleared = True
-        await self.async_save_profiles()
-        if cleared:
-            await self.async_save()
+        assigned = sorted(
+            desktop_id
+            for desktop_id, record in self.desktops.items()
+            if record.assigned_profile_id == profile_id
+        )
+        async with contextlib.AsyncExitStack() as stack:
+            for desktop_id in assigned:
+                await stack.enter_async_context(self._sync_lock(desktop_id))
+            if self.profiles.pop(profile_id, None) is None:
+                return False
+            cleared = False
+            for desktop_id, record in self.desktops.items():
+                if record.assigned_profile_id == profile_id:
+                    record.assigned_profile_id = None
+                    self._sync_failures.pop(desktop_id, None)
+                    cleared = True
+            await self.async_save_profiles()
+            if cleared:
+                await self.async_save()
         self._notify()
         return True
 
     async def async_assign_profile(self, desktop_id: str, profile_id: str | None) -> None:
-        """Set the profile a desktop should converge to, or clear its assignment."""
-        record = self.desktops.get(desktop_id)
-        if record is None:
-            raise DesktopUnavailableError("Desktop is not registered")
-        if profile_id is not None:
-            if profile_id not in self.profiles:
-                raise ProfileError(f"Profile {profile_id} was not found")
-            if CAPABILITY_APPLY_PROFILE not in record.capabilities:
-                raise ProfileError(f"{record.name} does not support profiles")
-        if record.assigned_profile_id == profile_id:
-            return
-        record.assigned_profile_id = profile_id
-        self._sync_failures.pop(desktop_id, None)
-        await self.async_save()
+        """Set the profile a desktop should converge to, or clear its assignment.
+
+        Waits for a push already on its way to the desktop, so the desktop does not change
+        after an unassignment returns.
+        """
+        async with self._sync_lock(desktop_id):
+            record = self.desktops.get(desktop_id)
+            if record is None:
+                raise DesktopUnavailableError("Desktop is not registered")
+            if profile_id is not None:
+                if profile_id not in self.profiles:
+                    raise ProfileError(f"Profile {profile_id} was not found")
+                if CAPABILITY_APPLY_PROFILE not in record.capabilities:
+                    raise ProfileError(f"{record.name} does not support profiles")
+            if record.assigned_profile_id == profile_id:
+                return
+            record.assigned_profile_id = profile_id
+            self._sync_failures.pop(desktop_id, None)
+            await self.async_save()
         self._notify()
 
     def assigned_profile(self, desktop_id: str) -> ProfileRecord | None:

@@ -75,6 +75,11 @@ def _document_depth(value: Any) -> int:
     return depth
 
 
+def same_document(left: Any, right: Any) -> bool:
+    """Compare JSON documents exactly; Python equality would treat 1 and true as equal."""
+    return json.dumps(left, sort_keys=True) == json.dumps(right, sort_keys=True)
+
+
 def validate_profile_document(document: Any) -> dict[str, Any]:
     """Return a detached copy of a structurally valid profile document.
 

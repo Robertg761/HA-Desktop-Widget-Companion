@@ -30,6 +30,7 @@ from custom_components.ha_desktop_widget.models import (
     DesktopRecord,
     ProfileDocumentError,
     ProfileRecord,
+    same_document,
     validate_profile_document,
 )
 from custom_components.ha_desktop_widget.runtime import (
@@ -222,6 +223,13 @@ async def test_profile_crud_and_revisions(hass: HomeAssistant) -> None:
         name="Study", document={"opacity": 0.6}, profile_id=profile.profile_id
     )
     assert changed.revision == 2
+    retyped = await runtime.async_save_profile(
+        name="Study", document={"opacity": 0.6, "frostedGlass": 1}, profile_id=profile.profile_id
+    )
+    retyped = await runtime.async_save_profile(
+        name="Study", document={"opacity": 0.6, "frostedGlass": True}, profile_id=profile.profile_id
+    )
+    assert retyped.revision == 4
 
     await runtime.async_save_profile(name="Kitchen", document={})
     for kwargs, message in (
@@ -531,10 +539,11 @@ async def test_forced_sync_waits_for_background_push(hass: HomeAssistant) -> Non
     await asyncio.sleep(0)
     background = connection.commands("apply_profile")[-1]
 
-    await runtime.async_assign_profile(DESKTOP_ID, kitchen.profile_id)
+    assign = hass.async_create_task(runtime.async_assign_profile(DESKTOP_ID, kitchen.profile_id))
     forced = hass.async_create_task(runtime.async_sync_profile(DESKTOP_ID, force=True))
     await asyncio.sleep(0)
     assert len(connection.commands("apply_profile")) == 1
+    assert not assign.done()
 
     _ack(runtime, connection, background)
     for _ in range(5):
@@ -568,6 +577,45 @@ async def test_current_revision_follows_failed_obsolete_push(hass: HomeAssistant
         await asyncio.sleep(0)
     assert connection.commands("apply_profile")[-1]["payload"]["revision"] == 2
     await runtime.async_shutdown()
+
+
+async def test_unassign_and_delete_wait_for_in_flight_push(hass: HomeAssistant) -> None:
+    """Clearing an assignment returns only after a push already on its way has finished."""
+    runtime = await _setup_entry(hass)
+    await _register(runtime)
+    profile = await runtime.async_save_profile(name="Office", document=DOCUMENT)
+    await runtime.async_assign_profile(DESKTOP_ID, profile.profile_id)
+    connection = _connect(runtime)
+
+    runtime.async_report_state(DESKTOP_ID, connection=connection, state={})
+    await asyncio.sleep(0)
+    unassign = hass.async_create_task(runtime.async_assign_profile(DESKTOP_ID, None))
+    await asyncio.sleep(0)
+    assert not unassign.done()
+    _ack(runtime, connection, connection.commands("apply_profile")[-1])
+    await unassign
+    assert runtime.get_desktop(DESKTOP_ID).assigned_profile_id is None
+
+    await runtime.async_assign_profile(DESKTOP_ID, profile.profile_id)
+    await runtime.async_save_profile(
+        name="Office", document={"opacity": 0.6}, profile_id=profile.profile_id
+    )
+    await asyncio.sleep(0)
+    delete = hass.async_create_task(runtime.async_delete_profile(profile.profile_id))
+    await asyncio.sleep(0)
+    assert not delete.done()
+    _ack(runtime, connection, connection.commands("apply_profile")[-1])
+    assert await delete
+    assert runtime.get_desktop(DESKTOP_ID).assigned_profile_id is None
+    assert len(connection.commands("apply_profile")) == 2
+    await runtime.async_shutdown()
+
+
+def test_documents_compare_as_json() -> None:
+    """A change between 1 and true is a real change, although Python calls them equal."""
+    assert same_document({"opacity": 1}, {"opacity": 1})
+    assert not same_document({"opacity": 1}, {"opacity": True})
+    assert not same_document({"opacity": 1}, {"opacity": 1.0})
 
 
 async def test_assignment_validation_and_delete(hass: HomeAssistant) -> None:
