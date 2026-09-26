@@ -289,6 +289,8 @@ async def test_snapshot_and_capture(hass: HomeAssistant) -> None:
         )
     assert save.await_count == 1
     assert runtime.get_snapshot(DESKTOP_ID)["document"] == DOCUMENT
+    summary = runtime.desktop_summary(runtime.get_desktop(DESKTOP_ID))
+    assert summary["snapshot_updated_at"] == runtime.get_snapshot(DESKTOP_ID)["updated_at"]
 
     captured = await runtime.async_capture_profile(DESKTOP_ID, name="Office")
     assert captured.document == DOCUMENT

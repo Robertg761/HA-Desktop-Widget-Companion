@@ -250,6 +250,7 @@ class HaDesktopWidgetPanel extends HTMLElement {
     this._baseline = null; // preview document right after loading the selection
     this._draft = null; // preview document now
     this._loadedRevision = null;
+    this._loadedSnapshotAt = null; // updated_at of the desktop snapshot being shown
     this._name = '';
     this._loadedName = ''; // name as loaded, to tell a rename apart from no change
     this._editing = false;
@@ -348,7 +349,17 @@ class HaDesktopWidgetPanel extends HTMLElement {
         this._loadedName = profile.name;
       }
     } else if (selection?.type === 'desktop') {
-      if (!this._desktops.some((item) => item.desktop_id === selection.id)) this._clearSelection();
+      const desktop = this._desktops.find((item) => item.desktop_id === selection.id);
+      if (!desktop) {
+        this._clearSelection();
+      } else if (
+        desktop.snapshot_updated_at !== this._loadedSnapshotAt &&
+        this._draft &&
+        !this._isDirty()
+      ) {
+        // The desktop reported a newer layout; show it rather than a stale copy.
+        void this._loadSelection();
+      }
     }
     this._renderSidebar();
     this._renderToolbar();
@@ -451,6 +462,7 @@ class HaDesktopWidgetPanel extends HTMLElement {
           desktop_id: selection.id,
         });
         document = snapshot.document;
+        this._loadedSnapshotAt = snapshot.updated_at;
       }
       if (this._selection !== selection) return;
       const api = await this._ensurePreview();
@@ -698,6 +710,9 @@ class HaDesktopWidgetPanel extends HTMLElement {
     const selection = this._selection;
     const name = this._name.trim();
     if (!selection || !this._draft || !name) return;
+    // The preview stays editable while the request is in flight, so remember exactly what was
+    // sent: only that becomes the saved baseline, and later edits stay unsaved.
+    const sentDraft = structuredClone(this._draft);
     const saved = await this._run(async () => {
       if (selection.type === 'profile') {
         return this._call({
@@ -708,25 +723,25 @@ class HaDesktopWidgetPanel extends HTMLElement {
             ? { expected_revision: this._loadedRevision }
             : {}),
           name,
-          document: mergeEditedSections(this._original, this._baseline, this._draft),
+          document: mergeEditedSections(this._original, this._baseline, sentDraft),
         });
       }
       // A desktop layout is complete, so it becomes a profile as shown.
-      return this._call({ type: `${DOMAIN}/profiles/save`, name, document: this._draft });
+      return this._call({ type: `${DOMAIN}/profiles/save`, name, document: sentDraft });
     });
     if (!saved) return;
     this._upsertProfile(saved);
     if (selection.type === 'profile') {
       this._original = saved.document;
-      this._baseline = structuredClone(this._draft);
+      this._baseline = sentDraft;
       this._loadedRevision = saved.revision;
-      this._name = saved.name;
+      if (this._name.trim() === name) this._name = saved.name;
       this._loadedName = saved.name;
       this._notice = `Saved revision ${saved.revision}. Desktops using this profile update when they are online.`;
       this._renderAll();
     } else {
-      this._baseline = structuredClone(this._draft);
-      this._loadedName = this._name.trim();
+      this._baseline = sentDraft;
+      this._loadedName = name;
       this._select({ type: 'profile', id: saved.profile_id });
       this._notice = `Saved as profile ${saved.name}.`;
     }
@@ -801,7 +816,40 @@ class HaDesktopWidgetPanel extends HTMLElement {
     this._renderStage();
   }
 
+  // Live updates re-render the sidebar and toolbar; put focus and the caret back where they
+  // were, or typing in a form would be interrupted by every desktop heartbeat.
+  _keepingFocus(render) {
+    const active = this.shadowRoot.activeElement;
+    const field = active?.dataset?.field;
+    const id = active?.dataset?.id;
+    let start = null;
+    let end = null;
+    try {
+      start = active?.selectionStart ?? null;
+      end = active?.selectionEnd ?? null;
+    } catch {
+      /* not a text control */
+    }
+    render();
+    if (!field) return;
+    const selector = `[data-field="${field}"]${id ? `[data-id="${CSS.escape(id)}"]` : ''}`;
+    const next = this.shadowRoot.querySelector(selector);
+    if (!next || next === active) return;
+    next.focus();
+    if (start !== null && typeof next.setSelectionRange === 'function') {
+      try {
+        next.setSelectionRange(start, end);
+      } catch {
+        /* not a text control */
+      }
+    }
+  }
+
   _renderSidebar() {
+    this._keepingFocus(() => this._renderSidebarContent());
+  }
+
+  _renderSidebarContent() {
     const aside = this.shadowRoot.querySelector('aside');
     if (!aside) return;
     if (!this._loaded) {
@@ -926,6 +974,10 @@ class HaDesktopWidgetPanel extends HTMLElement {
   }
 
   _renderToolbar() {
+    this._keepingFocus(() => this._renderToolbarContent());
+  }
+
+  _renderToolbarContent() {
     const toolbar = this.shadowRoot.querySelector('.toolbar');
     if (!toolbar) return;
     const selection = this._selection;

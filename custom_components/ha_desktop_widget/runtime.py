@@ -801,7 +801,9 @@ class HADesktopWidgetRuntime:
         """Return a desktop's public state together with its profile status."""
         data = record.as_public_dict(online=self.is_online(record.desktop_id))
         data["profile_out_of_date"] = self.profile_out_of_date(record.desktop_id)
-        data["has_snapshot"] = record.desktop_id in self.snapshots
+        snapshot = self.snapshots.get(record.desktop_id)
+        data["has_snapshot"] = snapshot is not None
+        data["snapshot_updated_at"] = snapshot["updated_at"] if snapshot else None
         return data
 
     def diagnostics(self) -> dict[str, Any]:

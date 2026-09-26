@@ -267,6 +267,74 @@ test('a failed load leaves nothing to save under the new selection', async ({ pa
   expect(errors).toEqual([]);
 });
 
+test('typing keeps focus while live updates arrive', async ({ page }) => {
+  const errors = await openPanel(page);
+  const panel = panelLocator(page);
+
+  await panel.locator('[data-action="select-profile"]', { hasText: 'Evening' }).click();
+  await waitForSelectionLoaded(page);
+  const name = panel.locator('[data-field="name"]');
+  await name.fill('Even');
+  await name.press('End');
+  for (const chunk of ['ing', ' li', 'ght']) {
+    await page.evaluate(() => window.__emit());
+    await page.waitForTimeout(20);
+    await page.keyboard.type(chunk);
+  }
+  await expect(name).toHaveValue('Evening light');
+  await expect(name).toBeFocused();
+  expect(errors).toEqual([]);
+});
+
+test('edits made while a save is in flight stay unsaved', async ({ page }) => {
+  const errors = await openPanel(page);
+  const panel = panelLocator(page);
+
+  await panel.locator('[data-action="select-profile"]', { hasText: 'Evening' }).click();
+  await waitForSelectionLoaded(page);
+  await panel.locator('[data-field="name"]').fill('Evening light');
+  await page.evaluate(() => {
+    window.__db.delayMs = 800;
+  });
+  await panel.locator('[data-role="save"]').click();
+  await page.evaluate(() => {
+    const api = window.__panel.shadowRoot.querySelector('iframe').contentWindow.__hadwPreview;
+    api.addEntity('switch.fan');
+  });
+  await page.waitForTimeout(200);
+  await page.evaluate(() => window.__panel._checkDocument());
+  await page.waitForFunction(() => !window.__panel._busy);
+
+  const saved = await page.evaluate(() => window.__db.profiles.evening);
+  expect(saved.name).toBe('Evening light');
+  expect(JSON.stringify(saved.document)).not.toContain('switch.fan');
+  await expect(panel.getByText('Unsaved changes')).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test('a newer desktop layout replaces a clean desktop preview', async ({ page }) => {
+  const errors = await openPanel(page);
+  const panel = panelLocator(page);
+
+  await panel.locator('[data-action="select-desktop"]').click();
+  await waitForSelectionLoaded(page);
+  await page.evaluate(() => {
+    const snapshot = window.__db.snapshots['desktop-office1'];
+    snapshot.document = {
+      ...snapshot.document,
+      customTabs: [{ id: 'office', name: 'Office', entityIds: ['switch.fan'] }],
+    };
+    snapshot.updated_at = new Date(Date.now() + 1000).toISOString();
+    window.__db.desktops[0].snapshot_updated_at = snapshot.updated_at;
+    window.__emit();
+  });
+  await page.waitForFunction(() =>
+    JSON.stringify(window.__panel._draft?.customTabs || []).includes('switch.fan')
+  );
+  await expect(panel.getByText('Unsaved changes')).toBeHidden();
+  expect(errors).toEqual([]);
+});
+
 test('a preview wider than a narrow screen scrolls instead of clipping', async ({ page }) => {
   await page.setViewportSize({ width: 420, height: 900 });
   const errors = await openPanel(page, '?narrow');
