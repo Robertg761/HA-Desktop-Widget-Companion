@@ -6,7 +6,7 @@ Home Assistant is the coordinator; the Electron application remains the desktop 
 and local OS agent.
 
 > [!IMPORTANT]
-> Version 0.2.0 is a public beta of the Home Assistant coordinator. It requires HA Desktop Widget
+> Version 0.3.0 is a public beta of the Home Assistant coordinator. It requires HA Desktop Widget
 > `v3.9.0` or newer. OAuth pairing and live commands have been exercised end to end on
 > Linux; Windows and macOS depend on the desktop release CI packaging and smoke gates and have not
 > yet received equivalent hands-on runtime testing.

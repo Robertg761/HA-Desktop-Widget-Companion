@@ -1,6 +1,6 @@
 [project]
 name = "ha-desktop-widget-companion"
-version = "0.2.0"
+version = "0.3.0"
 description = "Home Assistant coordinator for HA Desktop Widget clients"
 requires-python = ">=3.14"
 

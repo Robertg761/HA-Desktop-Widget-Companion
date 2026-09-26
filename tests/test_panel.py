@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
@@ -18,6 +20,9 @@ from custom_components.ha_desktop_widget.panel import (
 from custom_components.ha_desktop_widget.runtime import HADesktopWidgetRuntime
 
 DESKTOP_ID = "desktop-12345678"
+MANIFEST_VERSION = json.loads(
+    (Path(__file__).parents[1] / "custom_components/ha_desktop_widget/manifest.json").read_text()
+)["version"]
 
 
 async def _setup_entry(hass: HomeAssistant) -> MockConfigEntry:
@@ -54,7 +59,7 @@ async def test_panel_registers_for_admins_and_unregisters(hass: HomeAssistant) -
     kwargs = register.await_args.kwargs
     assert kwargs["frontend_url_path"] == PANEL_URL_PATH
     assert kwargs["require_admin"] is True
-    assert kwargs["module_url"].startswith(f"{STATIC_URL}/panel.js?v=0.2.0-")
+    assert kwargs["module_url"].startswith(f"{STATIC_URL}/panel.js?v={MANIFEST_VERSION}-")
     assert kwargs["config"]["preview_url"].startswith(f"{STATIC_URL}/preview/preview.html?v=")
 
     with patch(
