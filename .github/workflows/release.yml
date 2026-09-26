@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Version to release, without a leading v (must match manifest.json)
+        description: Version to release, without a leading v (must match manifest.json and pyproject.toml)
         required: true
         type: string
       extra_notes:
@@ -45,10 +45,13 @@ jobs:
             exit 1
           fi
           manifest="$(jq -r .version custom_components/ha_desktop_widget/manifest.json)"
-          if [ "$manifest" != "$VERSION" ]; then
-            echo "manifest.json is at $manifest, not $VERSION. Merge the version bump first." >&2
-            exit 1
-          fi
+          pyproject="$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')"
+          for pair in "manifest.json:$manifest" "pyproject.toml:$pyproject"; do
+            if [ "${pair#*:}" != "$VERSION" ]; then
+              echo "${pair%%:*} is at ${pair#*:}, not $VERSION. Merge the version bump first." >&2
+              exit 1
+            fi
+          done
           if git rev-parse -q --verify "refs/tags/v$VERSION" >/dev/null; then
             echo "Tag v$VERSION already exists." >&2
             exit 1
