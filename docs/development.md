@@ -48,6 +48,18 @@ npm run test:panel
 - HACS validation
 - JSON/YAML validation performed by the validation actions
 
+## Releasing
+
+1. Bump `version` in `custom_components/ha_desktop_widget/manifest.json` and `pyproject.toml`, and
+   turn the CHANGELOG's `Unreleased` heading into `## [X.Y.Z] - YYYY-MM-DD`. Merge that to `main`.
+2. Run the **Release** workflow from the Actions tab with the version (for example `0.3.0`). It
+   checks that the version matches the manifest and is not tagged yet, then tags `main` as
+   `vX.Y.Z` and publishes a GitHub release titled "HA Desktop Widget Companion X.Y.Z" with that
+   version's CHANGELOG notes. Versions with a suffix such as `0.4.0-beta.1` are published as
+   prereleases. HACS offers new versions from these releases.
+
+`scripts/release_notes.sh X.Y.Z` prints the notes the workflow will use.
+
 ## Before the first prerelease
 
 - Exercise a clean manual or HACS installation in a disposable Home Assistant instance.
