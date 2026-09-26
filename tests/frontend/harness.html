@@ -130,6 +130,12 @@
         'desktops/get_snapshot': (msg) => db.snapshots[msg.desktop_id],
         'profiles/save': (msg) => {
           let profile = msg.profile_id ? db.profiles[msg.profile_id] : null;
+          if (profile && msg.expected_revision !== undefined && profile.revision !== msg.expected_revision) {
+            throw {
+              code: 'revision_conflict',
+              message: `${profile.name} was changed elsewhere and is now at revision ${profile.revision}; reload it before saving`,
+            };
+          }
           if (!profile) {
             profile = { profile_id: `new${nextId++}`, revision: 1, created_at: now, document: {} };
             db.profiles[profile.profile_id] = profile;
@@ -165,6 +171,10 @@
         callWS: async (msg) => {
           db.calls.push(structuredClone(msg));
           if (db.delayMs) await new Promise((resolve) => setTimeout(resolve, db.delayMs));
+          if (db.failNext === msg.type) {
+            db.failNext = null;
+            throw { code: 'unknown_error', message: 'Simulated failure' };
+          }
           const handler = handlers[msg.type.replace('ha_desktop_widget/', '')];
           if (!handler) throw { code: 'unknown_command', message: msg.type };
           const result = structuredClone(handler(structuredClone(msg)));

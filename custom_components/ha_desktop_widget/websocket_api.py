@@ -14,6 +14,7 @@ from .runtime import (
     DesktopOwnershipError,
     DesktopUnavailableError,
     HADesktopWidgetRuntime,
+    ProfileConflictError,
     ProfileError,
     get_loaded_runtime,
 )
@@ -70,6 +71,8 @@ def _send_domain_error(connection: Any, message_id: int, error: Exception) -> No
         code = "unauthorized_device"
     elif isinstance(error, DesktopUnavailableError):
         code = "desktop_unavailable"
+    elif isinstance(error, ProfileConflictError):
+        code = "revision_conflict"
     elif isinstance(error, ProfileDocumentError | ProfileError):
         code = "invalid_profile"
     else:
@@ -381,6 +384,7 @@ def websocket_profiles_get(
     {
         vol.Required("type"): WS_PROFILES_SAVE,
         vol.Optional("profile_id"): PROFILE_ID,
+        vol.Optional("expected_revision"): vol.All(int, vol.Range(min=1)),
         vol.Required("name"): SHORT_STRING,
         vol.Required("document"): dict,
     }
@@ -399,6 +403,7 @@ async def websocket_profiles_save(
             name=msg["name"],
             document=msg["document"],
             profile_id=msg.get("profile_id"),
+            expected_revision=msg.get("expected_revision"),
         )
     except ProfileError as error:
         _send_domain_error(connection, msg["id"], error)

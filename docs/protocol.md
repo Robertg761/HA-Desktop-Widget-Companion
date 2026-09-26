@@ -202,7 +202,7 @@ Home Assistant frontends use these admin-only commands. Desktops do not need the
 | `ha_desktop_widget/desktops/assign_profile` | `desktop_id`, `profile_id` (or null) | Desktop summary |
 | `ha_desktop_widget/profiles/list` | – | `{"profiles": [...]}` without documents |
 | `ha_desktop_widget/profiles/get` | `profile_id` | Profile with `document` |
-| `ha_desktop_widget/profiles/save` | `name`, `document`, optional `profile_id` | Saved profile |
+| `ha_desktop_widget/profiles/save` | `name`, `document`, optional `profile_id` and `expected_revision` | Saved profile; `revision_conflict` if the profile moved past `expected_revision` |
 | `ha_desktop_widget/profiles/delete` | `profile_id` | – |
 | `ha_desktop_widget/subscribe_updates` | – | Events of `{"desktops", "profiles"}` on every change |
 

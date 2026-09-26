@@ -230,6 +230,43 @@ test('a rename made elsewhere is followed while the editor is clean', async ({ p
   expect(errors).toEqual([]);
 });
 
+test('saving over a newer revision from elsewhere is refused', async ({ page }) => {
+  const errors = await openPanel(page);
+  const panel = panelLocator(page);
+
+  await panel.locator('[data-action="select-profile"]', { hasText: 'Evening' }).click();
+  await waitForSelectionLoaded(page);
+  await panel.locator('[data-field="name"]').fill('Evening light');
+  await page.evaluate(() => {
+    const evening = window.__db.profiles.evening;
+    evening.revision = 3;
+    evening.document = { ui: { theme: 'dark' } };
+    window.__emit();
+  });
+  await panel.locator('[data-role="save"]').click();
+  await expect(panel.getByRole('alert')).toContainText('changed elsewhere');
+  const evening = await page.evaluate(() => window.__db.profiles.evening);
+  expect(evening.name).toBe('Evening');
+  expect(evening.document).toEqual({ ui: { theme: 'dark' } });
+  expect(errors).toEqual([]);
+});
+
+test('a failed load leaves nothing to save under the new selection', async ({ page }) => {
+  const errors = await openPanel(page);
+  const panel = panelLocator(page);
+
+  await panel.locator('[data-action="select-desktop"]').click();
+  await waitForSelectionLoaded(page);
+  await page.evaluate(() => {
+    window.__db.failNext = 'ha_desktop_widget/profiles/get';
+  });
+  await panel.locator('[data-action="select-profile"]', { hasText: 'Evening' }).click();
+  await expect(panel.getByRole('alert')).toContainText('Simulated failure');
+  await expect(panel.locator('[data-role="save"]')).toBeDisabled();
+  expect(await page.evaluate(() => window.__panel._draft)).toBeNull();
+  expect(errors).toEqual([]);
+});
+
 test('a preview wider than a narrow screen scrolls instead of clipping', async ({ page }) => {
   await page.setViewportSize({ width: 420, height: 900 });
   const errors = await openPanel(page, '?narrow');

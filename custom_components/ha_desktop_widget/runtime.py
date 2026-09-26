@@ -62,6 +62,10 @@ class ProfileError(HomeAssistantError):
     """Raised when a profile operation is invalid."""
 
 
+class ProfileConflictError(ProfileError):
+    """Raised when a profile changed since the caller loaded it."""
+
+
 @dataclass(slots=True)
 class DesktopSession:
     """A live authenticated desktop command subscription."""
@@ -496,8 +500,13 @@ class HADesktopWidgetRuntime:
         name: str,
         document: Any,
         profile_id: str | None = None,
+        expected_revision: int | None = None,
     ) -> ProfileRecord:
-        """Create a profile, or update one and bump its revision when its document changes."""
+        """Create a profile, or update one and bump its revision when its document changes.
+
+        With `expected_revision`, an update is refused if the profile has moved past the
+        revision the caller loaded, so an editor cannot silently revert someone else's save.
+        """
         clean_name = name.strip()[:64]
         if not clean_name:
             raise ProfileError("Profile name must not be empty")
@@ -509,6 +518,15 @@ class HADesktopWidgetRuntime:
         existing = self.profiles.get(profile_id) if profile_id else None
         if profile_id and existing is None:
             raise ProfileError(f"Profile {profile_id} was not found")
+        if (
+            existing is not None
+            and expected_revision is not None
+            and existing.revision != expected_revision
+        ):
+            raise ProfileConflictError(
+                f"{existing.name} was changed elsewhere and is now at revision "
+                f"{existing.revision}; reload it before saving"
+            )
         clash = self.find_profile_by_name(clean_name)
         if clash is not None and clash is not existing:
             raise ProfileError(f"A profile named {clash.name} already exists")

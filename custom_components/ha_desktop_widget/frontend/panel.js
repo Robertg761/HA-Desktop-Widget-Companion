@@ -377,7 +377,11 @@ class HaDesktopWidgetPanel extends HTMLElement {
   }
 
   _showError(error) {
-    this._error = error?.message || String(error);
+    this._error =
+      error?.code === 'revision_conflict'
+        ? `${error.message}. Your changes are still here: note them, choose Discard to load the ` +
+          'latest revision, then make them again.'
+        : error?.message || String(error);
     this._renderBanners();
   }
 
@@ -407,6 +411,12 @@ class HaDesktopWidgetPanel extends HTMLElement {
     // one profile's draft with another's identity.
     if (this._busy || !this._confirmDiscard()) return;
     this._selection = selection;
+    // Forget the previous selection's documents before loading, so a failed load cannot leave
+    // them editable (and savable) under the new identity.
+    this._original = null;
+    this._baseline = null;
+    this._draft = null;
+    this._loadedRevision = null;
     this._editing = false;
     this._error = '';
     this._notice = '';
@@ -693,6 +703,10 @@ class HaDesktopWidgetPanel extends HTMLElement {
         return this._call({
           type: `${DOMAIN}/profiles/save`,
           profile_id: selection.id,
+          // Refused if someone else saved since this editor loaded the profile.
+          ...(Number.isInteger(this._loadedRevision)
+            ? { expected_revision: this._loadedRevision }
+            : {}),
           name,
           document: mergeEditedSections(this._original, this._baseline, this._draft),
         });
