@@ -125,6 +125,76 @@ test('assigning a profile and deleting one go through the admin API', async ({ p
   expect(errors).toEqual([]);
 });
 
+test('a rename alone counts as an unsaved change', async ({ page }) => {
+  const errors = await openPanel(page);
+  const panel = panelLocator(page);
+
+  await panel.locator('[data-action="select-profile"]', { hasText: 'Evening' }).click();
+  await waitForSelectionLoaded(page);
+  await panel.locator('[data-field="name"]').fill('Evening light');
+  await expect(panel.getByText('Unsaved changes')).toBeVisible();
+
+  // Switching away asks first; declining keeps the typed name.
+  let asked = false;
+  page.once('dialog', (dialog) => {
+    asked = true;
+    return dialog.dismiss();
+  });
+  await panel.locator('[data-action="select-desktop"]').click();
+  expect(asked).toBe(true);
+  await expect(panel.locator('[data-field="name"]')).toHaveValue('Evening light');
+  expect(errors).toEqual([]);
+});
+
+test('selection is locked while a save is in flight', async ({ page }) => {
+  const errors = await openPanel(page);
+  const panel = panelLocator(page);
+
+  await panel.locator('[data-action="select-profile"]', { hasText: 'Evening' }).click();
+  await waitForSelectionLoaded(page);
+  await panel.locator('[data-field="name"]').fill('Evening light');
+  await page.evaluate(() => {
+    window.__db.delayMs = 1500;
+  });
+  await panel.locator('[data-role="save"]').click();
+  await expect(panel.locator('[data-action="select-desktop"]')).toBeDisabled();
+  await panel.locator('[data-action="select-desktop"]').click({ force: true });
+  expect(await page.evaluate(() => window.__panel._selection)).toEqual({
+    type: 'profile',
+    id: 'evening',
+  });
+
+  await page.waitForFunction(() => !window.__panel._busy);
+  await expect(panel.locator('[data-action="select-desktop"]')).toBeEnabled();
+  expect(await page.evaluate(() => window.__db.profiles.evening.name)).toBe('Evening light');
+  expect(errors).toEqual([]);
+});
+
+test('entities deleted from Home Assistant leave the preview', async ({ page }) => {
+  const errors = await openPanel(page);
+  const panel = panelLocator(page);
+
+  await panel.locator('[data-action="select-desktop"]').click();
+  await waitForSelectionLoaded(page);
+  const replaced = await page.evaluate(async () => {
+    const api = window.__panel.shadowRoot.querySelector('iframe').contentWindow.__hadwPreview;
+    const calls = [];
+    const original = api.setStates;
+    api.setStates = (states) => {
+      calls.push(Object.keys(states));
+      return original(states);
+    };
+    const { 'switch.fan': _removed, ...remaining } = window.__hass.states;
+    window.__panel.hass = { ...window.__hass, states: remaining };
+    await new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 50)));
+    return calls;
+  });
+  expect(replaced).toHaveLength(1);
+  expect(replaced[0]).not.toContain('switch.fan');
+  expect(replaced[0]).toContain('light.desk');
+  expect(errors).toEqual([]);
+});
+
 test('a preview wider than a narrow screen scrolls instead of clipping', async ({ page }) => {
   await page.setViewportSize({ width: 420, height: 900 });
   const errors = await openPanel(page, '?narrow');

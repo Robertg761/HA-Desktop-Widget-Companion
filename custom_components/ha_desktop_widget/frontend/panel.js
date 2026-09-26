@@ -238,6 +238,7 @@ class HaDesktopWidgetPanel extends HTMLElement {
     this._draft = null; // preview document now
     this._loadedRevision = null;
     this._name = '';
+    this._loadedName = ''; // name as loaded, to tell a rename apart from no change
     this._editing = false;
     this._entityInput = '';
     this._sizeSource = '';
@@ -366,7 +367,8 @@ class HaDesktopWidgetPanel extends HTMLElement {
   // --- selection --------------------------------------------------------------------------
 
   _isDirty() {
-    return !!this._draft && !sameJson(this._draft, this._baseline);
+    if (!this._draft) return false;
+    return !sameJson(this._draft, this._baseline) || this._name.trim() !== this._loadedName;
   }
 
   _confirmDiscard() {
@@ -384,7 +386,9 @@ class HaDesktopWidgetPanel extends HTMLElement {
   }
 
   _select(selection) {
-    if (!this._confirmDiscard()) return;
+    // A load or save in flight belongs to the current selection; switching mid-way would pair
+    // one profile's draft with another's identity.
+    if (this._busy || !this._confirmDiscard()) return;
     this._selection = selection;
     this._editing = false;
     this._error = '';
@@ -413,7 +417,7 @@ class HaDesktopWidgetPanel extends HTMLElement {
         });
         document = profile.document;
         revision = profile.revision;
-        if (!this._isDirty()) this._name = profile.name;
+        this._name = profile.name;
       } else {
         const snapshot = await this._call({
           type: `${DOMAIN}/desktops/get_snapshot`,
@@ -427,6 +431,7 @@ class HaDesktopWidgetPanel extends HTMLElement {
       await api.applyProfile(structuredClone(withPreviewDefaults(this._previewDefaults, document)));
       this._original = document;
       this._loadedRevision = revision;
+      this._loadedName = this._name.trim();
       this._baseline = structuredClone(api.getDocument());
       this._draft = structuredClone(this._baseline);
     });
@@ -503,7 +508,10 @@ class HaDesktopWidgetPanel extends HTMLElement {
     const api = this._previewApi;
     const states = this._hass?.states;
     if (!api || !states) return;
-    if (!this._pushedStates) {
+    const removed =
+      this._pushedStates && Object.keys(this._pushedStates).some((entityId) => !(entityId in states));
+    if (!this._pushedStates || removed) {
+      // The preview has no per-entity removal, so a deleted entity means replacing the set.
       api.setStates({ ...states });
     } else {
       for (const [entityId, state] of Object.entries(states)) {
@@ -682,10 +690,12 @@ class HaDesktopWidgetPanel extends HTMLElement {
       this._baseline = structuredClone(this._draft);
       this._loadedRevision = saved.revision;
       this._name = saved.name;
+      this._loadedName = saved.name;
       this._notice = `Saved revision ${saved.revision}. Desktops using this profile update when they are online.`;
       this._renderAll();
     } else {
       this._baseline = structuredClone(this._draft);
+      this._loadedName = this._name.trim();
       this._select({ type: 'profile', id: saved.profile_id });
       this._notice = `Saved as profile ${saved.name}.`;
     }
@@ -803,7 +813,9 @@ class HaDesktopWidgetPanel extends HTMLElement {
             const selected =
               selection?.type === 'profile' && selection.id === profile.profile_id;
             return `<li class="card ${selected ? 'selected' : ''}">
-              <button class="item" data-action="select-profile" data-id="${escapeHtml(profile.profile_id)}">
+              <button class="item" data-action="select-profile" data-id="${escapeHtml(profile.profile_id)}" ${
+                this._busy ? 'disabled' : ''
+              }>
                 <span class="name">${escapeHtml(profile.name)}</span>
                 <span class="meta">Revision ${profile.revision} · ${count} desktop${count === 1 ? '' : 's'}</span>
               </button>
@@ -863,7 +875,9 @@ class HaDesktopWidgetPanel extends HTMLElement {
     return `<li class="card ${selected ? 'selected' : ''}">
       ${
         desktop.has_snapshot
-          ? `<button class="item" data-action="select-desktop" data-id="${escapeHtml(desktop.desktop_id)}" title="Show this desktop's current layout">${nameMarkup}</button>`
+          ? `<button class="item" data-action="select-desktop" data-id="${escapeHtml(desktop.desktop_id)}" title="Show this desktop's current layout" ${
+              this._busy ? 'disabled' : ''
+            }>${nameMarkup}</button>`
           : `<div class="item" style="cursor:default">${nameMarkup}</div>`
       }
       <div class="desktop-controls">
@@ -918,7 +932,7 @@ class HaDesktopWidgetPanel extends HTMLElement {
         isProfile ? 'Profile name' : 'New profile name'
       }" value="${escapeHtml(this._name)}">
       ${profile ? `<span class="chip">Revision ${profile.revision}</span>` : `<span class="chip">Current desktop layout</span>`}
-      ${dirty ? `<span class="chip accent">Unsaved changes</span>` : ''}
+      <span class="chip accent ${dirty ? '' : 'hidden'}" data-role="dirty">Unsaved changes</span>
       <span class="grow"></span>
       <button class="action ${this._editing ? 'pressed' : ''}" data-action="toggle-edit" ${
         ready ? '' : 'disabled'
@@ -943,14 +957,17 @@ class HaDesktopWidgetPanel extends HTMLElement {
 
   _canSave() {
     if (!this._draft || this._busy || !this._name.trim()) return false;
-    if (this._selection?.type === 'desktop') return true;
-    const profile = this._profiles.find((item) => item.profile_id === this._selection?.id);
-    return this._isDirty() || (profile && profile.name !== this._name.trim());
+    return this._selection?.type === 'desktop' || this._isDirty();
   }
 
+  // Typing in the name field must not re-render the toolbar, which would steal focus.
   _updateSaveState() {
     const save = this.shadowRoot.querySelector('[data-role="save"]');
     if (save) save.disabled = !this._canSave();
+    const dirty = this.shadowRoot.querySelector('[data-role="dirty"]');
+    if (dirty) dirty.classList.toggle('hidden', !this._isDirty());
+    const discard = this.shadowRoot.querySelector('[data-action="discard"]');
+    if (discard) discard.disabled = !this._isDirty() || this._busy;
   }
 
   _renderBanners() {

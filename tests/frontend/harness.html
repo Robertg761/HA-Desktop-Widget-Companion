@@ -156,6 +156,7 @@
         },
         callWS: async (msg) => {
           db.calls.push(structuredClone(msg));
+          if (db.delayMs) await new Promise((resolve) => setTimeout(resolve, db.delayMs));
           const handler = handlers[msg.type.replace('ha_desktop_widget/', '')];
           if (!handler) throw { code: 'unknown_command', message: msg.type };
           const result = structuredClone(handler(structuredClone(msg)));
