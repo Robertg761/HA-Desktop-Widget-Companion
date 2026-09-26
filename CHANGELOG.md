@@ -2,6 +2,20 @@
 
 All notable changes to HA Desktop Widget Companion will be documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- **Desktop Widgets** admin sidebar panel: lists desktops and profiles, assigns profiles, shows
+  each desktop's reported layout, and creates and edits profiles in a live preview that runs the
+  real widget renderer against Home Assistant's entities. Tiles can be added, removed, and
+  reordered, and appearance changes go through the widget's own settings. Saving only writes the
+  sections that were edited, so partial profiles stay partial.
+- The widget preview bundle from HA Desktop Widget 3.11.0 (`frontend/preview`), with
+  `scripts/update_preview.sh` to refresh it from a desktop release.
+- `ha_desktop_widget/subscribe_updates`, an admin-only WebSocket subscription that streams desktop
+  and profile summaries whenever they change.
+
 ## [0.2.0] - 2026-09-26
 
 ### Added

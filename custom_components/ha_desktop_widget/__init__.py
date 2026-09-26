@@ -9,6 +9,7 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.typing import ConfigType
 
 from .const import DATA_RUNTIMES, DOMAIN, PLATFORMS
+from .panel import async_register_panel, async_remove_panel
 from .runtime import HADesktopWidgetRuntime
 from .services import async_setup_services
 from .websocket_api import async_setup_websocket_api
@@ -32,6 +33,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     entry.runtime_data = runtime
     hass.data[DOMAIN][DATA_RUNTIMES][entry.entry_id] = runtime
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    await async_register_panel(hass)
     return True
 
 
@@ -39,6 +41,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload the coordinator and its entity platforms."""
     if not await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
         return False
+    async_remove_panel(hass)
     runtime: HADesktopWidgetRuntime = entry.runtime_data
     await runtime.async_shutdown()
     hass.data[DOMAIN][DATA_RUNTIMES].pop(entry.entry_id, None)

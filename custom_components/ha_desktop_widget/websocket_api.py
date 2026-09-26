@@ -31,6 +31,7 @@ WS_PROFILES_LIST = f"{DOMAIN}/profiles/list"
 WS_PROFILES_GET = f"{DOMAIN}/profiles/get"
 WS_PROFILES_SAVE = f"{DOMAIN}/profiles/save"
 WS_PROFILES_DELETE = f"{DOMAIN}/profiles/delete"
+WS_SUBSCRIBE_UPDATES = f"{DOMAIN}/subscribe_updates"
 
 DESKTOP_ID = vol.All(str, vol.Strip, vol.Length(min=8, max=128))
 SHORT_STRING = vol.All(str, vol.Strip, vol.Length(min=1, max=64))
@@ -426,6 +427,34 @@ async def websocket_profiles_delete(
     connection.send_result(msg["id"])
 
 
+@websocket_api.websocket_command({vol.Required("type"): WS_SUBSCRIBE_UPDATES})
+@websocket_api.require_admin
+@callback
+def websocket_subscribe_updates(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Stream desktop and profile summaries whenever either changes."""
+    runtime = _runtime_or_error(connection, msg["id"])
+    if runtime is None:
+        return
+
+    @callback
+    def send_update() -> None:
+        connection.send_event(
+            msg["id"],
+            {
+                "desktops": [
+                    runtime.desktop_summary(record) for record in runtime.desktops.values()
+                ],
+                "profiles": [profile.as_summary_dict() for profile in runtime.profiles.values()],
+            },
+        )
+
+    connection.subscriptions[msg["id"]] = runtime.async_add_listener(send_update)
+    connection.send_result(msg["id"])
+    send_update()
+
+
 def async_setup_websocket_api(hass: HomeAssistant) -> None:
     """Register protocol commands once during integration setup."""
     for command in (
@@ -442,5 +471,6 @@ def async_setup_websocket_api(hass: HomeAssistant) -> None:
         websocket_profiles_get,
         websocket_profiles_save,
         websocket_profiles_delete,
+        websocket_subscribe_updates,
     ):
         websocket_api.async_register_command(hass, command)

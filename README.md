@@ -21,6 +21,8 @@ and local OS agent.
   and profile-update entities
 - `show`, `hide`, `toggle`, and `switch_page` actions
 - Named, revision-controlled layout profiles that desktops stay in sync with
+- A **Desktop Widgets** sidebar panel for administrators, with a live, editable preview of each
+  profile
 - Redacted diagnostics
 
 The integration does not render the widget and does not expose an arbitrary remote-execution API.
@@ -74,7 +76,25 @@ names, and tile options. Profiles never carry credentials, hotkeys, window geome
 or file-sync settings; those stay local to each computer. Profiles need HA Desktop Widget `v3.9.0`
 or newer.
 
-To share one computer's layout with others:
+### Desktop Widgets panel
+
+Administrators get a **Desktop Widgets** entry in the Home Assistant sidebar. It lists every
+connected desktop and profile and previews profiles with the real widget renderer and your live
+entities.
+
+- **New profile** starts from a connected desktop's current layout or from an empty profile.
+- Select a desktop to see the layout it last reported, then **Save as profile**.
+- Select a profile to edit it in the preview: **Edit tiles** lets you add, remove, and drag tiles,
+  and the widget's own settings button changes its appearance. **Save** creates a new revision.
+- Each desktop's **Profile** menu assigns a profile; its status shows whether the desktop is up to
+  date.
+
+Saving only changes the sections you edited, so a profile that sets only the appearance keeps
+leaving each desktop's pages alone.
+
+### Profiles without the panel
+
+To share one computer's layout with others from actions or automations:
 
 1. Arrange the widget the way you want on one computer. Connected desktops report their current
    layout to Home Assistant automatically.

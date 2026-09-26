@@ -14,6 +14,20 @@ python3.14 -m venv .venv
 `python -m compileall custom_components/ha_desktop_widget` and JSON parsing are useful quick checks,
 but they do not replace tests against Home Assistant.
 
+## Widget preview bundle
+
+`custom_components/ha_desktop_widget/frontend/preview` is the HA Desktop Widget renderer built for
+the panel's iframe (`npm run build:panel` in the desktop repository). It is committed so HACS
+installs need no build step, and `PANEL_VERSION.json` records the desktop version and commit it
+came from. Refresh it from a desktop release tag:
+
+```bash
+scripts/update_preview.sh v3.11.0
+```
+
+The script builds the bundle and drops the legacy icon-font formats that browsers able to run the
+preview never load. `frontend/panel.js` is plain JavaScript with no build step.
+
 ## Required CI
 
 - Ruff

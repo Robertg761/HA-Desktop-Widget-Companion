@@ -204,6 +204,7 @@ Home Assistant frontends use these admin-only commands. Desktops do not need the
 | `ha_desktop_widget/profiles/get` | `profile_id` | Profile with `document` |
 | `ha_desktop_widget/profiles/save` | `name`, `document`, optional `profile_id` | Saved profile |
 | `ha_desktop_widget/profiles/delete` | `profile_id` | – |
+| `ha_desktop_widget/subscribe_updates` | – | Events of `{"desktops", "profiles"}` on every change |
 
 Saving a profile whose document changed increments its revision; renaming does not. Names are
 unique regardless of case and may not equal another profile's ID. Assigning a profile to an online
