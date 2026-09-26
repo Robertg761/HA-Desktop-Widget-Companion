@@ -96,6 +96,8 @@ class HADesktopWidgetRuntime:
         self._sync_locks: dict[str, asyncio.Lock] = {}
         self._sync_scheduled: set[str] = set()
         self._sync_failures: dict[str, tuple[str, int]] = {}
+        # Profiles being deleted: they can no longer be assigned.
+        self._deleting_profiles: set[str] = set()
         self._sync_tasks: set[asyncio.Task[None]] = set()
 
     async def async_load(self) -> None:
@@ -509,11 +511,20 @@ class HADesktopWidgetRuntime:
         clash = self._find_profile_by_name(clean_name)
         if clash is not None and clash is not existing:
             raise ProfileError(f"A profile named {clash.name} already exists")
+        # Actions accept a profile's name or ID, so a name must never be another profile's ID.
+        if any(
+            profile_id.casefold() == clean_name.casefold()
+            for profile_id, profile in self.profiles.items()
+            if profile is not existing
+        ):
+            raise ProfileError(f"{clean_name} is reserved as another profile's ID")
 
         if existing is None:
             if len(self.profiles) >= MAX_PROFILES:
                 raise ProfileError(f"At most {MAX_PROFILES} profiles can be stored")
-            profile = ProfileRecord(profile_id=uuid4().hex, name=clean_name, document=validated)
+            profile = ProfileRecord(
+                profile_id=self._new_profile_id(), name=clean_name, document=validated
+            )
             self.profiles[profile.profile_id] = profile
         else:
             profile = existing
@@ -529,6 +540,12 @@ class HADesktopWidgetRuntime:
             if record.assigned_profile_id == profile.profile_id:
                 self.async_request_profile_sync(desktop_id)
         return profile
+
+    def _new_profile_id(self) -> str:
+        while True:
+            profile_id = uuid4().hex
+            if profile_id not in self.profiles and self._find_profile_by_name(profile_id) is None:
+                return profile_id
 
     async def async_capture_profile(self, desktop_id: str, *, name: str) -> ProfileRecord:
         """Save a desktop's reported layout as a profile, updating a same-named profile."""
@@ -550,27 +567,35 @@ class HADesktopWidgetRuntime:
         Waits for pushes already on their way to the assigned desktops, so none of them changes
         after the deletion returns.
         """
-        if profile_id not in self.profiles:
+        if profile_id not in self.profiles or profile_id in self._deleting_profiles:
             return False
-        assigned = sorted(
-            desktop_id
-            for desktop_id, record in self.desktops.items()
-            if record.assigned_profile_id == profile_id
-        )
-        async with contextlib.AsyncExitStack() as stack:
-            for desktop_id in assigned:
-                await stack.enter_async_context(self._sync_lock(desktop_id))
-            if self.profiles.pop(profile_id, None) is None:
-                return False
-            cleared = False
-            for desktop_id, record in self.desktops.items():
-                if record.assigned_profile_id == profile_id:
-                    record.assigned_profile_id = None
-                    self._sync_failures.pop(desktop_id, None)
-                    cleared = True
-            await self.async_save_profiles()
-            if cleared:
-                await self.async_save()
+        # Refuse new assignments first, then hold every assigned desktop's sync lock. Assignments
+        # already past their check can still land while this waits, so keep re-checking.
+        self._deleting_profiles.add(profile_id)
+        try:
+            async with contextlib.AsyncExitStack() as stack:
+                locked: set[str] = set()
+                while pending := sorted(
+                    desktop_id
+                    for desktop_id, record in self.desktops.items()
+                    if record.assigned_profile_id == profile_id and desktop_id not in locked
+                ):
+                    for desktop_id in pending:
+                        await stack.enter_async_context(self._sync_lock(desktop_id))
+                        locked.add(desktop_id)
+                if self.profiles.pop(profile_id, None) is None:
+                    return False
+                cleared = False
+                for desktop_id, record in self.desktops.items():
+                    if record.assigned_profile_id == profile_id:
+                        record.assigned_profile_id = None
+                        self._sync_failures.pop(desktop_id, None)
+                        cleared = True
+                await self.async_save_profiles()
+                if cleared:
+                    await self.async_save()
+        finally:
+            self._deleting_profiles.discard(profile_id)
         self._notify()
         return True
 
@@ -585,7 +610,7 @@ class HADesktopWidgetRuntime:
             if record is None:
                 raise DesktopUnavailableError("Desktop is not registered")
             if profile_id is not None:
-                if profile_id not in self.profiles:
+                if profile_id not in self.profiles or profile_id in self._deleting_profiles:
                     raise ProfileError(f"Profile {profile_id} was not found")
                 if CAPABILITY_APPLY_PROFILE not in record.capabilities:
                     raise ProfileError(f"{record.name} does not support profiles")

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
@@ -609,6 +610,49 @@ async def test_unassign_and_delete_wait_for_in_flight_push(hass: HomeAssistant) 
     assert runtime.get_desktop(DESKTOP_ID).assigned_profile_id is None
     assert len(connection.commands("apply_profile")) == 2
     await runtime.async_shutdown()
+
+
+async def test_profile_being_deleted_cannot_be_assigned(hass: HomeAssistant) -> None:
+    """While deletion waits for an in-flight push, the profile cannot gain new desktops."""
+    runtime = await _setup_entry(hass)
+    await _register(runtime)
+    await _register(runtime, LAPTOP_ID)
+    profile = await runtime.async_save_profile(name="Office", document=DOCUMENT)
+    await runtime.async_assign_profile(DESKTOP_ID, profile.profile_id)
+    connection = _connect(runtime)
+    runtime.async_report_state(DESKTOP_ID, connection=connection, state={})
+    await asyncio.sleep(0)
+
+    delete = hass.async_create_task(runtime.async_delete_profile(profile.profile_id))
+    await asyncio.sleep(0)
+    with pytest.raises(ProfileError, match="not found"):
+        await runtime.async_assign_profile(LAPTOP_ID, profile.profile_id)
+    assert not delete.done()
+
+    _ack(runtime, connection, connection.commands("apply_profile")[-1])
+    assert await delete
+    assert runtime.get_desktop(LAPTOP_ID).assigned_profile_id is None
+    await runtime.async_shutdown()
+
+
+async def test_profile_names_cannot_shadow_profile_ids(hass: HomeAssistant) -> None:
+    """A name equal to another profile's ID would make that profile unreachable by name."""
+    runtime = await _setup_entry(hass)
+    office = await runtime.async_save_profile(name="Office", document=DOCUMENT)
+
+    with pytest.raises(ProfileError, match="reserved"):
+        await runtime.async_save_profile(name=office.profile_id.upper(), document={})
+    renamed = await runtime.async_save_profile(
+        name=office.profile_id, document=DOCUMENT, profile_id=office.profile_id
+    )
+    assert runtime.find_profile(renamed.name) is office
+
+    with patch(
+        "custom_components.ha_desktop_widget.runtime.uuid4",
+        side_effect=[SimpleNamespace(hex=office.profile_id), SimpleNamespace(hex="b" * 32)],
+    ):
+        kitchen = await runtime.async_save_profile(name="Kitchen", document={})
+    assert kitchen.profile_id == "b" * 32
 
 
 def test_documents_compare_as_json() -> None:
