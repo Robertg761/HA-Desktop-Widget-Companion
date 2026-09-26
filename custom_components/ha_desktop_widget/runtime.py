@@ -501,11 +501,13 @@ class HADesktopWidgetRuntime:
         document: Any,
         profile_id: str | None = None,
         expected_revision: int | None = None,
+        expected_name: str | None = None,
     ) -> ProfileRecord:
         """Create a profile, or update one and bump its revision when its document changes.
 
-        With `expected_revision`, an update is refused if the profile has moved past the
-        revision the caller loaded, so an editor cannot silently revert someone else's save.
+        With `expected_revision` and `expected_name`, an update is refused if the profile's
+        document or name changed since the caller loaded it, so an editor cannot silently
+        revert someone else's save. Together they cover every change a profile can take.
         """
         clean_name = name.strip()[:64]
         if not clean_name:
@@ -518,10 +520,9 @@ class HADesktopWidgetRuntime:
         existing = self.profiles.get(profile_id) if profile_id else None
         if profile_id and existing is None:
             raise ProfileError(f"Profile {profile_id} was not found")
-        if (
-            existing is not None
-            and expected_revision is not None
-            and existing.revision != expected_revision
+        if existing is not None and (
+            (expected_revision is not None and existing.revision != expected_revision)
+            or (expected_name is not None and existing.name != expected_name.strip())
         ):
             raise ProfileConflictError(
                 f"{existing.name} was changed elsewhere and is now at revision "

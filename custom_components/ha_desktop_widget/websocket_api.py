@@ -385,6 +385,7 @@ def websocket_profiles_get(
         vol.Required("type"): WS_PROFILES_SAVE,
         vol.Optional("profile_id"): PROFILE_ID,
         vol.Optional("expected_revision"): vol.All(int, vol.Range(min=1)),
+        vol.Optional("expected_name"): SHORT_STRING,
         vol.Required("name"): SHORT_STRING,
         vol.Required("document"): dict,
     }
@@ -404,6 +405,7 @@ async def websocket_profiles_save(
             document=msg["document"],
             profile_id=msg.get("profile_id"),
             expected_revision=msg.get("expected_revision"),
+            expected_name=msg.get("expected_name"),
         )
     except ProfileError as error:
         _send_domain_error(connection, msg["id"], error)

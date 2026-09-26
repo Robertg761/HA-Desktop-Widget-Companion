@@ -341,8 +341,6 @@ class HaDesktopWidgetPanel extends HTMLElement {
       if (!profile) {
         this._clearSelection();
         this._notice = 'The profile you were viewing was deleted.';
-      } else if (profile.revision !== this._loadedRevision && !this._isDirty()) {
-        void this._loadSelection();
       } else if (profile.name !== this._loadedName && this._name.trim() === this._loadedName) {
         // Renamed elsewhere and not renamed here: follow it, or a later save would revert it.
         this._name = profile.name;
@@ -350,20 +348,31 @@ class HaDesktopWidgetPanel extends HTMLElement {
       }
     } else if (selection?.type === 'desktop') {
       const desktop = this._desktops.find((item) => item.desktop_id === selection.id);
-      if (!desktop) {
-        this._clearSelection();
-      } else if (
-        desktop.snapshot_updated_at !== this._loadedSnapshotAt &&
-        this._draft &&
-        !this._isDirty()
-      ) {
-        // The desktop reported a newer layout; show it rather than a stale copy.
-        void this._loadSelection();
-      }
+      if (!desktop) this._clearSelection();
     }
     this._renderSidebar();
     this._renderToolbar();
     this._renderStage();
+    this._refreshIfStale();
+  }
+
+  /**
+   * Reload a clean selection when the latest summary is newer than what is shown. Runs after
+   * every update and after every operation, so a change that arrives while a load is in
+   * flight is still picked up. Comparing "newer" rather than "different" means a response
+   * that is ahead of a late update event does not reload in a loop.
+   */
+  _refreshIfStale() {
+    const selection = this._selection;
+    if (this._busy || !selection || !this._draft || this._isDirty()) return;
+    if (selection.type === 'profile') {
+      const profile = this._profiles.find((item) => item.profile_id === selection.id);
+      if (profile && profile.revision > (this._loadedRevision ?? 0)) void this._loadSelection();
+    } else {
+      const desktop = this._desktops.find((item) => item.desktop_id === selection.id);
+      const reported = desktop?.snapshot_updated_at;
+      if (reported && reported > (this._loadedSnapshotAt ?? '')) void this._loadSelection();
+    }
   }
 
   async _call(message) {
@@ -384,6 +393,7 @@ class HaDesktopWidgetPanel extends HTMLElement {
     } finally {
       this._busy = false;
       this._renderAll();
+      this._refreshIfStale();
     }
   }
 
@@ -720,7 +730,7 @@ class HaDesktopWidgetPanel extends HTMLElement {
           profile_id: selection.id,
           // Refused if someone else saved since this editor loaded the profile.
           ...(Number.isInteger(this._loadedRevision)
-            ? { expected_revision: this._loadedRevision }
+            ? { expected_revision: this._loadedRevision, expected_name: this._loadedName }
             : {}),
           name,
           document: mergeEditedSections(this._original, this._baseline, sentDraft),

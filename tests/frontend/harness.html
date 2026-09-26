@@ -123,15 +123,20 @@
         });
       let nextId = 1;
       const handlers = {
-        'profiles/get': (msg) => {
-          const profile = db.profiles[msg.profile_id];
+        'profiles/get': async (msg) => {
+          // Read before any delay, like a response already on its way.
+          const profile = structuredClone(db.profiles[msg.profile_id]);
+          if (db.getDelayMs) await new Promise((resolve) => setTimeout(resolve, db.getDelayMs));
           if (!profile) throw { code: 'not_found', message: 'Profile was not found' };
           return profile;
         },
         'desktops/get_snapshot': (msg) => db.snapshots[msg.desktop_id],
         'profiles/save': (msg) => {
           let profile = msg.profile_id ? db.profiles[msg.profile_id] : null;
-          if (profile && msg.expected_revision !== undefined && profile.revision !== msg.expected_revision) {
+          const moved =
+            (msg.expected_revision !== undefined && profile?.revision !== msg.expected_revision) ||
+            (msg.expected_name !== undefined && profile?.name !== msg.expected_name);
+          if (profile && moved) {
             throw {
               code: 'revision_conflict',
               message: `${profile.name} was changed elsewhere and is now at revision ${profile.revision}; reload it before saving`,
@@ -178,8 +183,9 @@
           }
           const handler = handlers[msg.type.replace('ha_desktop_widget/', '')];
           if (!handler) throw { code: 'unknown_command', message: msg.type };
-          const result = structuredClone(handler(structuredClone(msg)));
-          setTimeout(emit, 0);
+          const result = structuredClone(await handler(structuredClone(msg)));
+          // Like Home Assistant, only changes produce an update event; reads do not.
+          if (!/\/(get|get_snapshot)$/.test(msg.type)) setTimeout(emit, 0);
           return result;
         },
       };

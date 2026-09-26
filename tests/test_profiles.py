@@ -237,8 +237,20 @@ async def test_profile_crud_and_revisions(hass: HomeAssistant) -> None:
         await runtime.async_save_profile(
             name="Study", document={}, profile_id=profile.profile_id, expected_revision=3
         )
+    with pytest.raises(ProfileConflictError):
+        await runtime.async_save_profile(
+            name="Study",
+            document={},
+            profile_id=profile.profile_id,
+            expected_revision=4,
+            expected_name="Office",
+        )
     current = await runtime.async_save_profile(
-        name="Study", document={"opacity": 0.6}, profile_id=profile.profile_id, expected_revision=4
+        name="Study",
+        document={"opacity": 0.6},
+        profile_id=profile.profile_id,
+        expected_revision=4,
+        expected_name="Study",
     )
     assert current.revision == 5
 

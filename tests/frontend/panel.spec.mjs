@@ -335,6 +335,47 @@ test('a newer desktop layout replaces a clean desktop preview', async ({ page })
   expect(errors).toEqual([]);
 });
 
+test('saving over a rename made elsewhere is refused', async ({ page }) => {
+  const errors = await openPanel(page);
+  const panel = panelLocator(page);
+
+  await panel.locator('[data-action="select-profile"]', { hasText: 'Evening' }).click();
+  await waitForSelectionLoaded(page);
+  await page.evaluate(() => {
+    const api = window.__panel.shadowRoot.querySelector('iframe').contentWindow.__hadwPreview;
+    api.addEntity('switch.fan');
+    window.__panel._checkDocument();
+    // Renamed elsewhere; this editor has not heard about it yet.
+    window.__db.profiles.evening.name = 'Dusk';
+  });
+  await expect(panel.getByText('Unsaved changes')).toBeVisible();
+  await panel.locator('[data-role="save"]').click();
+  await expect(panel.getByRole('alert')).toContainText('changed elsewhere');
+  expect(await page.evaluate(() => window.__db.profiles.evening.name)).toBe('Dusk');
+  expect(errors).toEqual([]);
+});
+
+test('a revision that arrives during a load is shown once the load finishes', async ({ page }) => {
+  const errors = await openPanel(page);
+  const panel = panelLocator(page);
+
+  await page.evaluate(() => {
+    window.__db.getDelayMs = 400;
+  });
+  await panel.locator('[data-action="select-profile"]', { hasText: 'Evening' }).click();
+  await page.waitForTimeout(100);
+  await page.evaluate(() => {
+    const evening = window.__db.profiles.evening;
+    evening.revision = 3;
+    evening.document = { ui: { theme: 'dark' } };
+    window.__emit();
+    window.__db.getDelayMs = 0;
+  });
+  await page.waitForFunction(() => window.__panel._loadedRevision === 3 && !window.__panel._busy);
+  expect(await page.evaluate(() => window.__panel._original)).toEqual({ ui: { theme: 'dark' } });
+  expect(errors).toEqual([]);
+});
+
 test('a preview wider than a narrow screen scrolls instead of clipping', async ({ page }) => {
   await page.setViewportSize({ width: 420, height: 900 });
   const errors = await openPanel(page, '?narrow');
