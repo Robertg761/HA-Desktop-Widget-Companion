@@ -2,7 +2,7 @@
 
 All notable changes to HA Desktop Widget Companion will be documented in this file.
 
-## [Unreleased]
+## [0.3.0] - 2026-09-26
 
 ### Added
 
