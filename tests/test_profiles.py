@@ -191,12 +191,14 @@ def test_desktop_state_carries_profile_identity_and_window_size() -> None:
     assert (record.window_width, record.window_height) == (420, None)
     record.apply_state({"visible": True})
     assert (record.active_profile_id, record.profile_revision) == ("abc", 3)
+    record.apply_state({"active_profile_id": "def"})
+    assert (record.active_profile_id, record.profile_revision) == ("def", None)
 
     refreshed = DesktopRecord.from_registration(
         {"desktop_id": DESKTOP_ID, "protocol_version": True}, owner_user_id="x", existing=record
     )
     assert refreshed.protocol_version == 1
-    assert refreshed.active_profile_id == "abc"
+    assert refreshed.active_profile_id == "def"
     assert refreshed.window_width == 420
 
 
@@ -425,6 +427,35 @@ async def test_forced_sync_without_reported_revision_is_not_repeated(
     runtime.async_report_state(DESKTOP_ID, connection=connection, state={})
     await asyncio.sleep(0)
     assert len(connection.commands("apply_profile")) == 1
+    await runtime.async_shutdown()
+
+
+async def test_switching_profiles_needs_the_new_revision_reported(
+    hass: HomeAssistant,
+) -> None:
+    """A new profile ID alone does not confirm a revision the old profile happened to share."""
+    runtime = await _setup_entry(hass)
+    await _register(runtime)
+    office = await runtime.async_save_profile(name="Office", document=DOCUMENT)
+    kitchen = await runtime.async_save_profile(name="Kitchen", document={"opacity": 0.5})
+    connection = _connect(runtime)
+    runtime.async_report_state(
+        DESKTOP_ID,
+        connection=connection,
+        state={"active_profile_id": office.profile_id, "profile_revision": 1},
+    )
+    await runtime.async_assign_profile(DESKTOP_ID, kitchen.profile_id)
+
+    forced = hass.async_create_task(runtime.async_sync_profile(DESKTOP_ID, force=True))
+    await asyncio.sleep(0)
+    _ack(
+        runtime,
+        connection,
+        connection.commands("apply_profile")[-1],
+        state={"active_profile_id": kitchen.profile_id},
+    )
+    assert await forced
+    assert runtime.profile_out_of_date(DESKTOP_ID)
     await runtime.async_shutdown()
 
 

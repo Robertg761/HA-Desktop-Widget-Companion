@@ -227,9 +227,11 @@ class DesktopRecord:
         # The desktop reports its applied profile identity only once one has been applied,
         # so an absent key keeps the last known identity rather than clearing it.
         if "active_profile_id" in state:
-            self.active_profile_id = _clean_optional_string(
-                state["active_profile_id"], maximum=64
-            )
+            profile_id = _clean_optional_string(state["active_profile_id"], maximum=64)
+            # A revision belongs to one profile; never carry it over to a different one.
+            if profile_id != self.active_profile_id and "profile_revision" not in state:
+                self.profile_revision = None
+            self.active_profile_id = profile_id
         if "profile_revision" in state:
             self.profile_revision = _clean_int(
                 state["profile_revision"], minimum=0, maximum=2**31 - 1
