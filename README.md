@@ -6,24 +6,24 @@ Home Assistant is the coordinator; the Electron application remains the desktop 
 and local OS agent.
 
 > [!IMPORTANT]
-> Version 0.1.0 is the first public beta of the Home Assistant coordinator. It requires HA Desktop
-> Widget `v3.9.0-beta.1` or newer. OAuth pairing and live commands have been exercised end to end on
+> Version 0.2.0 is a public beta of the Home Assistant coordinator. It requires HA Desktop Widget
+> `v3.9.0` or newer. OAuth pairing and live commands have been exercised end to end on
 > Linux; Windows and macOS depend on the desktop release CI packaging and smoke gates and have not
 > yet received equivalent hands-on runtime testing.
 
-## Current development slice
+## Features
 
 - Singleton UI config flow with no YAML or token input
 - Persistent registration of desktop installations against the authenticated HA user
 - Outbound, authenticated custom WebSocket protocol for desktop clients
 - Live command subscriptions and durable command acknowledgements
-- Home Assistant device registration with connectivity, visibility, and current-page entities
+- A Home Assistant device per desktop with connectivity, widget visibility, current-page, profile,
+  and profile-update entities
 - `show`, `hide`, `toggle`, and `switch_page` actions
+- Named, revision-controlled layout profiles that desktops stay in sync with
 - Redacted diagnostics
 
-Named profiles, revision-controlled assignments, and `apply_profile` are the next implementation
-slices. The integration does not render the widget and does not expose an arbitrary remote-execution
-API.
+The integration does not render the widget and does not expose an arbitrary remote-execution API.
 
 ## Set up HA Desktop Widget
 
@@ -64,13 +64,34 @@ There are two separate things to install:
 5. Follow the sign-in and approval prompts to connect that computer.
 
 The Companion integration can be set up before any computers are connected. Install HA Desktop
-Widget `v3.9.0-beta.1` or newer for each computer you want to manage.
+Widget `v3.9.0` or newer for each computer you want to manage.
 
-## Beta scope
+## Profiles
 
-Version 0.1.0 includes device registration, connectivity/visibility/current-page entities, and the
-`show`, `hide`, `toggle`, and `switch_page` actions. Named profile storage, revision-controlled
-assignment, and `apply_profile` are intentionally deferred to the next phase.
+A profile is a named copy of a widget layout: appearance (theme, accent, background, opacity,
+frosted glass), primary cards, Quick Access pages and tiles, comparison graphs, custom icons and
+names, and tile options. Profiles never carry credentials, hotkeys, window geometry, desktop pins,
+or file-sync settings; those stay local to each computer. Profiles need HA Desktop Widget `v3.9.0`
+or newer.
+
+To share one computer's layout with others:
+
+1. Arrange the widget the way you want on one computer. Connected desktops report their current
+   layout to Home Assistant automatically.
+2. Call the **HA Desktop Widget: Capture profile** action with that desktop and a profile name.
+3. Choose the profile in each desktop's **Profile** select, or call **Apply profile** with the
+   desktops you want to update.
+
+A desktop assigned to a profile stays in sync with it. Capturing or saving a profile again creates
+a new revision, and every assigned desktop applies it as soon as it is online. The **Profile
+update** binary sensor turns on while a desktop has not applied its profile's current revision. A
+profile overwrites only the sections it contains, and changes made locally on the desktop remain
+until the next revision arrives. Use **Unassign profile** to stop managing a desktop's layout;
+**Save profile** and **Delete profile** manage profiles directly.
+
+> [!NOTE]
+> If the desktop app's folder-based profile sync is enabled for the same sections, whichever
+> mechanism writes last wins. Avoid managing the same settings with both.
 
 ## Development
 

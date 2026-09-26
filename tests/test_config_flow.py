@@ -15,6 +15,7 @@ async def test_user_flow_creates_credential_free_entry(hass: HomeAssistant) -> N
 
     assert result["type"] is FlowResultType.FORM
     assert result["step_id"] == "user"
+    assert result["description_placeholders"]["releases_url"].startswith("https://github.com/")
     assert result["data_schema"]({}) == {}
 
     result = await hass.config_entries.flow.async_configure(result["flow_id"], user_input={})

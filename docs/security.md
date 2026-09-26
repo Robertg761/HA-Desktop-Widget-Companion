@@ -7,10 +7,17 @@
 - Registration binds a stable random desktop installation ID to its first authenticated HA user.
 - Only the active command-subscription connection can report state or acknowledge commands for that
   desktop.
-- Home Assistant administrators can manage any desktop. Human calls to the custom device-level
-  actions are admin-only in protocol v1; Home Assistant system and automation contexts remain
-  available. Standard switch control continues to use Home Assistant entity permissions.
-- Integration storage contains metadata and last-known UI state, never HA tokens or desktop secrets.
+- Home Assistant administrators can manage any desktop. Human calls to the custom actions,
+  including every profile action, are admin-only in protocol v1; Home Assistant system and
+  automation contexts remain available. The standard widget switch and profile select continue to
+  use Home Assistant entity permissions.
+- Stored layout snapshots are bounded per Home Assistant user and in total, so a desktop credential
+  cannot grow storage without limit or evict another user's snapshots.
+- Profile and snapshot administration over the WebSocket API is admin-only. A desktop session can
+  only report its own snapshot and never read profiles or other desktops' snapshots.
+- Integration storage contains metadata, last-known UI state, profiles, and layout snapshots, never
+  HA tokens or desktop secrets. Diagnostics list profile names and section names but never profile
+  or snapshot contents, which can name every entity on a dashboard.
 
 ## Remote command limits
 
@@ -20,10 +27,13 @@ Protocol v1 permits only:
 - hide
 - toggle
 - switch to a bounded page identifier
+- apply a bounded profile document limited to the widget's shareable layout sections
 
 There is intentionally no arbitrary process launch, shell execution, file access, URL opening,
 JavaScript evaluation, or generic Electron IPC escape hatch. Payloads are allowlisted and bounded.
-Offline commands are rejected rather than queued for later replay.
+Offline commands are rejected rather than queued for later replay. A profile assignment is stored
+desired state instead: a desktop receives the assigned profile's current revision when it next
+reports a different one, never a backlog of past commands.
 
 ## Desktop OAuth requirements
 

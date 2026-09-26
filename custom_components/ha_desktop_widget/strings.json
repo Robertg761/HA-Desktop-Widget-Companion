@@ -5,7 +5,7 @@
     },
     "step": {
       "user": {
-        "description": "Set up the Home Assistant Companion integration for HA Desktop Widget. This does not install the desktop app. On each computer, download and install HA Desktop Widget from https://github.com/Robertg761/HA-Desktop-Widget/releases, then open the app and choose Connect with Home Assistant.",
+        "description": "Set up the Home Assistant Companion integration for HA Desktop Widget. This does not install the desktop app. On each computer, download and install HA Desktop Widget from {releases_url}, then open the app and choose Connect with Home Assistant.",
         "title": "Set up HA Desktop Widget"
       }
     }
@@ -14,6 +14,14 @@
     "binary_sensor": {
       "connected": {
         "name": "Connected"
+      },
+      "profile_update": {
+        "name": "Profile update"
+      }
+    },
+    "select": {
+      "profile": {
+        "name": "Profile"
       }
     },
     "sensor": {
@@ -28,6 +36,44 @@
     }
   },
   "services": {
+    "apply_profile": {
+      "name": "Apply profile",
+      "description": "Assign a profile to one or more desktops and apply it now to those that are online. Offline desktops receive it when they next connect, and later revisions of the profile follow automatically.",
+      "fields": {
+        "device_id": {
+          "description": "Registered desktops to control.",
+          "name": "Desktops"
+        },
+        "profile": {
+          "name": "Profile",
+          "description": "Name or ID of the profile to apply."
+        }
+      }
+    },
+    "capture_profile": {
+      "name": "Capture profile",
+      "description": "Save a desktop's current layout as a profile. A profile with the same name gets a new revision, which desktops assigned to it then apply.",
+      "fields": {
+        "device_id": {
+          "name": "Desktop",
+          "description": "Registered desktop whose layout to capture."
+        },
+        "name": {
+          "name": "Profile name",
+          "description": "Name of the profile to create or update."
+        }
+      }
+    },
+    "delete_profile": {
+      "name": "Delete profile",
+      "description": "Delete a profile and clear it from any desktops it is assigned to. Their current layout is left unchanged.",
+      "fields": {
+        "profile": {
+          "name": "Profile",
+          "description": "Name or ID of the profile to delete."
+        }
+      }
+    },
     "hide": {
       "description": "Hide the widget on one or more connected desktops.",
       "fields": {
@@ -37,6 +83,20 @@
         }
       },
       "name": "Hide widget"
+    },
+    "save_profile": {
+      "name": "Save profile",
+      "description": "Create or update a profile from a layout document. A changed document gets a new revision, which desktops assigned to the profile then apply.",
+      "fields": {
+        "name": {
+          "name": "Profile name",
+          "description": "Name of the profile to create or update."
+        },
+        "document": {
+          "name": "Document",
+          "description": "Profile layout sections, as produced by Capture profile or the desktop app."
+        }
+      }
     },
     "show": {
       "description": "Show the widget on one or more connected desktops.",
@@ -71,6 +131,16 @@
         }
       },
       "name": "Toggle widget"
+    },
+    "unassign_profile": {
+      "name": "Unassign profile",
+      "description": "Stop keeping one or more desktops in sync with a profile. Their current layout is left unchanged.",
+      "fields": {
+        "device_id": {
+          "description": "Registered desktops to control.",
+          "name": "Desktops"
+        }
+      }
     }
   }
 }
