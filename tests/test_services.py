@@ -116,7 +116,8 @@ async def test_service_errors_and_admin_boundary(
             context=Context(user_id=hass_read_only_user.id),
         )
 
-    with pytest.raises(HomeAssistantError, match="offline"):
+    # Errors name the desktop as Home Assistant shows it, including a name the user gave it.
+    with pytest.raises(HomeAssistantError, match=r"^Office: .*offline"):
         await hass.services.async_call(
             DOMAIN,
             SERVICE_SHOW,
@@ -124,7 +125,8 @@ async def test_service_errors_and_admin_boundary(
             blocking=True,
         )
 
-    with pytest.raises(HomeAssistantError, match="not supported"):
+    dr.async_get(hass).async_update_device(device.id, name_by_user="Den PC")
+    with pytest.raises(HomeAssistantError, match=r"^Den PC: .*not supported"):
         await hass.services.async_call(
             DOMAIN,
             SERVICE_SWITCH_PAGE,

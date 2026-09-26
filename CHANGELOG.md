@@ -2,6 +2,19 @@
 
 All notable changes to HA Desktop Widget Companion will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+
+- The panel's widget preview is rebuilt from HA Desktop Widget 4.0.0-beta.3, which answers the
+  widget's own Home Assistant requests inside the preview. The preview no longer stalls on a
+  "Waiting for live Home Assistant data" card, and tile edits are picked up for saving.
+
+### Fixed
+
+- Action errors name the desktop as Home Assistant shows it (including a name you gave the
+  device) instead of its internal desktop ID.
+
 ## [0.3.0] - 2026-09-26
 
 ### Added
