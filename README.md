@@ -6,8 +6,8 @@ Home Assistant is the coordinator; the Electron application remains the desktop 
 and local OS agent.
 
 > [!IMPORTANT]
-> Version 0.1.0 is the first public beta of the Home Assistant coordinator. It requires HA Desktop
-> Widget `v3.9.0-beta.1` or newer. OAuth pairing and live commands have been exercised end to end on
+> Version 0.2.0 is a public beta of the Home Assistant coordinator. It requires HA Desktop Widget
+> `v3.9.0` or newer. OAuth pairing and live commands have been exercised end to end on
 > Linux; Windows and macOS depend on the desktop release CI packaging and smoke gates and have not
 > yet received equivalent hands-on runtime testing.
 
@@ -64,7 +64,7 @@ There are two separate things to install:
 5. Follow the sign-in and approval prompts to connect that computer.
 
 The Companion integration can be set up before any computers are connected. Install HA Desktop
-Widget `v3.9.0-beta.1` or newer for each computer you want to manage.
+Widget `v3.9.0` or newer for each computer you want to manage.
 
 ## Profiles
 
