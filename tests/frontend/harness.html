@@ -52,6 +52,14 @@
       };
       const db = {
         profiles: {
+          names: {
+            profile_id: 'names',
+            name: 'Named tiles',
+            revision: 1,
+            document: { customEntityNames: { 'light.desk': 'Reading lamp' } },
+            created_at: now,
+            updated_at: now,
+          },
           evening: {
             profile_id: 'evening',
             name: 'Evening',
@@ -172,7 +180,7 @@
       document.body.appendChild(panel);
       panel.narrow = new URLSearchParams(location.search).has('narrow');
       panel.hass = hass;
-      Object.assign(window, { __db: db, __hass: hass, __panel: panel });
+      Object.assign(window, { __db: db, __emit: emit, __hass: hass, __panel: panel });
     </script>
   </body>
 </html>

@@ -51,12 +51,25 @@ function mergeEditedSections(original, baseline, draft) {
   return merged;
 }
 
+// Empty values for every shareable section (HA Desktop Widget profile schema v1). The preview's
+// own defaults omit some sections, and an omitted section would keep the previous selection's.
+const EMPTY_SECTIONS = Object.freeze({
+  primaryCards: [],
+  favoriteEntities: [],
+  customTabs: [],
+  activeTabId: '',
+  comparisonGraphs: [],
+  quickAccessTileOptions: {},
+  customEntityIcons: {},
+  customEntityNames: {},
+});
+
 /**
  * The preview merges each applied document over whatever it showed before. Layer the document
- * over the preview's pristine defaults so nothing from a previous selection leaks through.
+ * over explicit values for every section so nothing from a previous selection leaks through.
  */
 function withPreviewDefaults(pristine, document) {
-  const layered = { ...(pristine || {}), ...(document || {}) };
+  const layered = { ...EMPTY_SECTIONS, ...(pristine || {}), ...(document || {}) };
   if (pristine?.ui) layered.ui = { ...pristine.ui, ...(document?.ui || {}) };
   return layered;
 }
@@ -329,6 +342,10 @@ class HaDesktopWidgetPanel extends HTMLElement {
         this._notice = 'The profile you were viewing was deleted.';
       } else if (profile.revision !== this._loadedRevision && !this._isDirty()) {
         void this._loadSelection();
+      } else if (profile.name !== this._loadedName && this._name.trim() === this._loadedName) {
+        // Renamed elsewhere and not renamed here: follow it, or a later save would revert it.
+        this._name = profile.name;
+        this._loadedName = profile.name;
       }
     } else if (selection?.type === 'desktop') {
       if (!this._desktops.some((item) => item.desktop_id === selection.id)) this._clearSelection();

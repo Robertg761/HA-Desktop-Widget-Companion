@@ -195,6 +195,41 @@ test('entities deleted from Home Assistant leave the preview', async ({ page }) 
   expect(errors).toEqual([]);
 });
 
+test("one profile's sections never leak into the next preview", async ({ page }) => {
+  const errors = await openPanel(page);
+  const panel = panelLocator(page);
+  const previewDocument = () =>
+    page.evaluate(() =>
+      window.__panel.shadowRoot.querySelector('iframe').contentWindow.__hadwPreview.getDocument()
+    );
+
+  await panel.locator('[data-action="select-profile"]', { hasText: 'Named tiles' }).click();
+  await page.waitForFunction(() => window.__panel._selection?.id === 'names');
+  await waitForSelectionLoaded(page);
+  expect((await previewDocument()).customEntityNames).toEqual({ 'light.desk': 'Reading lamp' });
+
+  await panel.locator('[data-action="select-profile"]', { hasText: 'Evening' }).click();
+  await page.waitForFunction(() => window.__panel._selection?.id === 'evening');
+  await waitForSelectionLoaded(page);
+  expect((await previewDocument()).customEntityNames ?? {}).toEqual({});
+  expect(errors).toEqual([]);
+});
+
+test('a rename made elsewhere is followed while the editor is clean', async ({ page }) => {
+  const errors = await openPanel(page);
+  const panel = panelLocator(page);
+
+  await panel.locator('[data-action="select-profile"]', { hasText: 'Evening' }).click();
+  await waitForSelectionLoaded(page);
+  await page.evaluate(() => {
+    window.__db.profiles.evening.name = 'Dusk';
+    window.__emit();
+  });
+  await expect(panel.locator('[data-field="name"]')).toHaveValue('Dusk');
+  await expect(panel.getByText('Unsaved changes')).toBeHidden();
+  expect(errors).toEqual([]);
+});
+
 test('a preview wider than a narrow screen scrolls instead of clipping', async ({ page }) => {
   await page.setViewportSize({ width: 420, height: 900 });
   const errors = await openPanel(page, '?narrow');
