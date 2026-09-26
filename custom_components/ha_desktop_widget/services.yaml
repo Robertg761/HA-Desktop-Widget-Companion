@@ -33,3 +33,55 @@ switch_page:
       required: true
       selector:
         text:
+
+apply_profile:
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          integration: ha_desktop_widget
+          multiple: true
+    profile:
+      required: true
+      selector:
+        text:
+
+unassign_profile:
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          integration: ha_desktop_widget
+          multiple: true
+
+capture_profile:
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          integration: ha_desktop_widget
+    name:
+      required: true
+      selector:
+        text:
+
+save_profile:
+  fields:
+    name:
+      required: true
+      selector:
+        text:
+    document:
+      required: true
+      selector:
+        object:
+
+delete_profile:
+  fields:
+    profile:
+      required: true
+      selector:
+        text:

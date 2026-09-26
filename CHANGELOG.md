@@ -2,6 +2,36 @@
 
 All notable changes to HA Desktop Widget Companion will be documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- Named, revision-controlled layout profiles stored in Home Assistant, using the desktop's profile
+  schema version 1. Profiles can be captured from a desktop's reported layout, saved from a
+  document, applied to desktops, unassigned, and deleted through new actions.
+- Profile assignments: an assigned desktop is brought to the profile's current revision whenever
+  it is online and reports a different one, including after the profile changes.
+- `ha_desktop_widget/put_config_snapshot`, which stores each desktop's current shareable layout.
+- A **Profile** select and a **Profile update** binary sensor for each desktop.
+- Admin-only WebSocket commands for listing desktops, reading snapshots, assigning profiles, and
+  managing profiles, for use by Home Assistant frontends.
+- Desktop window size and applied profile identity are stored from state reports.
+
+### Changed
+
+- Actions targeting several desktops now send commands to all of them at once instead of waiting
+  for each desktop in turn.
+- Re-registration updates the Home Assistant device name, model, and software version, so app
+  upgrades appear on the device page.
+
+### Fixed
+
+- State reports and command acknowledgements from HA Desktop Widget 3.9 were rejected because they
+  include window size and profile fields. Show, hide, toggle, and switch-page commands therefore
+  timed out in Home Assistant even though the desktop had carried them out. Unknown state fields
+  are now ignored instead of rejected.
+- Corrupt stored protocol versions no longer prevent the integration from loading.
+
 ## [0.1.0] - 2026-08-02
 
 First public beta.

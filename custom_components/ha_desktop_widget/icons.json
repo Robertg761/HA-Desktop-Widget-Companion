@@ -1,7 +1,26 @@
 {
+  "entity": {
+    "select": {
+      "profile": {
+        "default": "mdi:view-dashboard-outline"
+      }
+    }
+  },
   "services": {
+    "apply_profile": {
+      "service": "mdi:account-sync-outline"
+    },
+    "capture_profile": {
+      "service": "mdi:content-save-outline"
+    },
+    "delete_profile": {
+      "service": "mdi:delete-outline"
+    },
     "hide": {
       "service": "mdi:eye-off-outline"
+    },
+    "save_profile": {
+      "service": "mdi:file-document-edit-outline"
     },
     "show": {
       "service": "mdi:eye-outline"
@@ -11,6 +30,9 @@
     },
     "toggle": {
       "service": "mdi:eye-refresh-outline"
+    },
+    "unassign_profile": {
+      "service": "mdi:link-variant-off"
     }
   }
 }

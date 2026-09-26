@@ -58,9 +58,16 @@ def async_add_new_entities(
     async_add_entities,
     entity_factory,
 ) -> None:
-    """Add entities for newly registered desktops without duplicating existing ones."""
+    """Add entities for newly registered desktops without duplicating existing ones.
+
+    The factory returns one entity or a list of entities for a desktop.
+    """
     new_ids = set(runtime.desktops) - known_desktop_ids
     if not new_ids:
         return
     known_desktop_ids.update(new_ids)
-    async_add_entities([entity_factory(runtime, desktop_id) for desktop_id in sorted(new_ids)])
+    entities: list[Entity] = []
+    for desktop_id in sorted(new_ids):
+        created = entity_factory(runtime, desktop_id)
+        entities.extend(created if isinstance(created, list) else [created])
+    async_add_entities(entities)
