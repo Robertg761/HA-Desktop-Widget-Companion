@@ -376,6 +376,26 @@ test('a revision that arrives during a load is shown once the load finishes', as
   expect(errors).toEqual([]);
 });
 
+test('a rename that arrives during a load is adopted once the load finishes', async ({ page }) => {
+  const errors = await openPanel(page);
+  const panel = panelLocator(page);
+
+  await page.evaluate(() => {
+    window.__db.getDelayMs = 400;
+  });
+  await panel.locator('[data-action="select-profile"]', { hasText: 'Evening' }).click();
+  await page.waitForTimeout(100);
+  await page.evaluate(() => {
+    window.__db.profiles.evening.name = 'Dusk';
+    window.__emit();
+    window.__db.getDelayMs = 0;
+  });
+  await page.waitForFunction(() => window.__panel._draft && !window.__panel._busy);
+  await expect(panel.locator('[data-field="name"]')).toHaveValue('Dusk');
+  await expect(panel.getByText('Unsaved changes')).toBeHidden();
+  expect(errors).toEqual([]);
+});
+
 test('a preview wider than a narrow screen scrolls instead of clipping', async ({ page }) => {
   await page.setViewportSize({ width: 420, height: 900 });
   const errors = await openPanel(page, '?narrow');
