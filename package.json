@@ -1,0 +1,11 @@
+{
+  "name": "ha-desktop-widget-companion-frontend-tests",
+  "private": true,
+  "description": "Browser tests for the Desktop Widgets panel",
+  "scripts": {
+    "test:panel": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.56.1"
+  }
+}

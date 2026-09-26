@@ -28,10 +28,22 @@ scripts/update_preview.sh v3.11.0
 The script builds the bundle and drops the legacy icon-font formats that browsers able to run the
 preview never load. `frontend/panel.js` is plain JavaScript with no build step.
 
+## Panel browser tests
+
+`tests/frontend` drives the real panel module and preview bundle in Chromium against an in-memory
+fake of the Home Assistant connection (`tests/frontend/harness.html`).
+
+```bash
+npm ci
+npx playwright install chromium
+npm run test:panel
+```
+
 ## Required CI
 
 - Ruff
 - Pytest with coverage
+- Playwright panel tests
 - Hassfest
 - HACS validation
 - JSON/YAML validation performed by the validation actions

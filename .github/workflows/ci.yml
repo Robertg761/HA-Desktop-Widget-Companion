@@ -29,3 +29,24 @@ jobs:
 
       - name: Test
         run: pytest
+
+  panel:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          cache: npm
+          node-version: "22"
+
+      - name: Install panel test dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Test panel
+        run: npm run test:panel

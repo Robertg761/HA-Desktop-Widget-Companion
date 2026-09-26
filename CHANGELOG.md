@@ -15,6 +15,7 @@ All notable changes to HA Desktop Widget Companion will be documented in this fi
   `scripts/update_preview.sh` to refresh it from a desktop release.
 - `ha_desktop_widget/subscribe_updates`, an admin-only WebSocket subscription that streams desktop
   and profile summaries whenever they change.
+- Playwright browser tests for the panel, run in CI against the real preview bundle.
 
 ## [0.2.0] - 2026-09-26
 
